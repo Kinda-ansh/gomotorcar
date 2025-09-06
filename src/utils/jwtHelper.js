@@ -41,8 +41,7 @@ const jwtUtils = {
   verifyToken(token) {
     try {
       return jwt.verify(token, config.jwt.secret, {
-
-        audience: jwt.decode(token).id,
+        audience: jwt.decode(token).userId,
         issuer: 'upsdma',
       });
     } catch (error) {
