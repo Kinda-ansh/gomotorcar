@@ -170,19 +170,23 @@ export const createServer = () => {
   /**
    * Enable Cross-Origin Resource Sharing (CORS)
    */
-  app.set('trust proxy', 1);
+app.set('trust proxy', 1);
 
-  const corsOptions = {
-    // Reflect the request origin in the CORS response. This effectively allows all origins.
-    origin: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    optionsSuccessStatus: 204,
-  };
+const corsOptions = {
+  // Reflect the request origin in the CORS response. This effectively allows all origins.
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization',
+    'device-platform' // Add this header
+  ],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
 
-  app.use(cors(corsOptions));
-  app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
   app.use(
     session({

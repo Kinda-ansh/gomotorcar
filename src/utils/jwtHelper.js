@@ -40,11 +40,13 @@ const jwtUtils = {
    */
   verifyToken(token) {
     try {
+      const decoded = jwt.decode(token);
       return jwt.verify(token, config.jwt.secret, {
-        audience: jwt.decode(token).userId,
+        audience: [decoded.id], // Fix: use 'id' to match the generation
         issuer: 'upsdma',
       });
     } catch (error) {
+      console.error('JWT Verification Error:', error.message);
       throw new Error('Invalid or expired token');
     }
   },
