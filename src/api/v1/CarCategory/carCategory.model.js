@@ -51,8 +51,6 @@ carCategorySchema.methods.softDelete = async function (userId) {
 };
 
 // Unique name only among non-deleted documents
-carCategorySchema.index({ name: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
-// Removed mongoose-unique-validator to avoid false positives with soft delete
 carCategorySchema.plugin(AutoIncrement, {
     inc_field: 'code',
     id: 'carCategory',

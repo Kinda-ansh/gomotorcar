@@ -17,7 +17,7 @@ const residenceTypeSchema = new Schema(
             required: [true, 'Name is required'],
             trim: true
         },
-       
+
         createdBy: {
             type: Schema.Types.ObjectId,
             ref: 'User',
@@ -52,7 +52,6 @@ residenceTypeSchema.methods.softDelete = async function (userId) {
 };
 
 // Unique name only among non-deleted documents
-residenceTypeSchema.index({ name: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
 // Removed mongoose-unique-validator to avoid false positives with soft delete
 residenceTypeSchema.plugin(AutoIncrement, {
     inc_field: 'code',

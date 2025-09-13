@@ -16,10 +16,7 @@ const carRegistrationTypeSchema = new Schema(
             type: String,
             required: [true, 'Name is required'],
             trim: true,
-            index: {
-                unique: true,
-                partialFilterExpression: { name: { $type: 'string' } },
-            },
+          
         },
         createdBy: {
             type: Schema.Types.ObjectId,

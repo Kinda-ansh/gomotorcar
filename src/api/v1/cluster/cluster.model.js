@@ -136,7 +136,6 @@ clusterSchema.methods.softDelete = async function (userId) {
     await this.save();
 };
 
-
 // Removed mongoose-unique-validator to avoid false positives with soft delete
 clusterSchema.plugin(AutoIncrement, {
     inc_field: 'code',
