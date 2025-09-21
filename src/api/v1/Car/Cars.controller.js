@@ -210,12 +210,123 @@ const deleteCar = async (req, res) => {
     }
 };
 
+
+const getCarsDashboard = async (req, res) => {
+    try {
+        const query = { deletedAt: null };
+
+        // Aggregation pipeline
+        const aggregation = [
+            { $match: query },
+            {
+                $facet: {
+                    totalCars: [{ $count: 'count' }],
+                    totalBrands: [{ $group: { _id: '$brand' } }, { $count: 'count' }],
+                    totalCarModels: [{ $group: { _id: '$carModel' } }, { $count: 'count' }],
+                    totalCarCategories: [{ $group: { _id: '$carCategory' } }, { $count: 'count' }],
+                    totalCarRegistrationTypes: [{ $group: { _id: '$carRegistrationType' } }, { $count: 'count' }],
+                    totalCarTransmissionTypes: [{ $group: { _id: '$carTransmissionType' } }, { $count: 'count' }],
+                    totalFuelTypes: [{ $group: { _id: '$fuelType' } }, { $count: 'count' }],
+                    latestCars: [
+                        { $sort: { createdAt: -1 } },
+                        { $limit: 10 },
+                        {
+                            $lookup: {
+                                from: 'brands',
+                                localField: 'brand',
+                                foreignField: '_id',
+                                as: 'brand'
+                            }
+                        },
+                        { $unwind: { path: '$brand', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'carmodels',
+                                localField: 'carModel',
+                                foreignField: '_id',
+                                as: 'carModel'
+                            }
+                        },
+                        { $unwind: { path: '$carModel', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'carcategories',
+                                localField: 'carCategory',
+                                foreignField: '_id',
+                                as: 'carCategory'
+                            }
+                        },
+                        { $unwind: { path: '$carCategory', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'carregistrationtypes',
+                                localField: 'carRegistrationType',
+                                foreignField: '_id',
+                                as: 'carRegistrationType'
+                            }
+                        },
+                        { $unwind: { path: '$carRegistrationType', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'cartransmissiontypes',
+                                localField: 'carTransmissionType',
+                                foreignField: '_id',
+                                as: 'carTransmissionType'
+                            }
+                        },
+                        { $unwind: { path: '$carTransmissionType', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'fueltypes',
+                                localField: 'fuelType',
+                                foreignField: '_id',
+                                as: 'fuelType'
+                            }
+                        },
+                        { $unwind: { path: '$fuelType', preserveNullAndEmptyArrays: true } }
+                    ]
+                }
+            }
+        ];
+
+        const result = await Cars.aggregate(aggregation);
+
+        const data = result[0] || {};
+
+        return createResponse({
+            res,
+            statusCode: httpStatus.OK,
+            status: true,
+            message: 'Cars dashboard data retrieved successfully',
+            data: {
+                totalCars: data.totalCars[0]?.count || 0,
+                totalBrands: data.totalBrands[0]?.count || 0,
+                totalCarModels: data.totalCarModels[0]?.count || 0,
+                totalCarCategories: data.totalCarCategories[0]?.count || 0,
+                totalCarRegistrationTypes: data.totalCarRegistrationTypes[0]?.count || 0,
+                totalCarTransmissionTypes: data.totalCarTransmissionTypes[0]?.count || 0,
+                totalFuelTypes: data.totalFuelTypes[0]?.count || 0,
+                latestCars: data.latestCars || []
+            }
+        });
+    } catch (error) {
+        console.error('Cars dashboard error:', error);
+        return createResponse({
+            res,
+            statusCode: httpStatus.INTERNAL_SERVER_ERROR,
+            status: false,
+            message: 'Failed to fetch Cars dashboard',
+            error: error.message
+        });
+    }
+};
 export const CarsController = {
     getCars,
     createCar,
     getCar,
     updateCar,
     deleteCar,
+    getCarsDashboard,
 };
 
 

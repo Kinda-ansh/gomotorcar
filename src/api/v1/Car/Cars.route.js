@@ -6,6 +6,7 @@ import { CarsController } from './Cars.controller';
 const router = express.Router();
 
 router.get('/', auth, CarsController.getCars);
+router.get('/dashboard', auth, CarsController.getCarsDashboard);
 router.post('/', auth, CarsController.createCar);
 router.get('/:id', auth, CarsController.getCar);
 router.patch('/:id', auth, CarsController.updateCar);

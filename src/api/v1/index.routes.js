@@ -14,6 +14,7 @@ import carTransmissionTypeRoutes from './CarTransmissionType/carTransmissionType
 import carRegistrationTypeRoutes from './CarRegistrationType/carRegistrationType.route';
 import rolesPermissionRoutes from './RolesAndPermissions/RolesPermission.route';
 import carsRoutes from './Car/Cars.route';
+import gettingStartedRoutes from './getting-started/getting-started.route';
 
 const { FileUploadController } = require('./common/fileupload.controller');
 const { upload, uploadFile, uploadMultipleFiles } = FileUploadController;
@@ -32,6 +33,7 @@ router.use('/car-transmission-type', carTransmissionTypeRoutes);
 router.use('/car-registration-type', carRegistrationTypeRoutes);
 router.use('/roles-permissions', rolesPermissionRoutes);
 router.use('/cars', carsRoutes);
+router.use('/getting-started', gettingStartedRoutes);
 
 // router.post('/version', VersionController.matchVersion);
 router.post('/version-create', VersionController.createVersion);
