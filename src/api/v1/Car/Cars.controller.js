@@ -4,6 +4,12 @@ import { extractCommonQueryParams, getIdFromParams } from '../../../utils/reques
 import { getCommonSearchConditionForMasters } from '../../../utils/commonHelper';
 import Cars from './Cars.model';
 import { createCarSchema, updateCarSchema } from './Cars.validator';
+import CarRegistrationType from './../CarRegistrationType/carRegistrationType.model';
+import CarTransmissionType from './../CarTransmissionType/carTransmissionType.model';
+import FuelType from './../FuelType/fuelType.model';
+import Brand from './../brand/brand.model';
+import CarModel from './../CarModel/carModel.model';
+import CarCategory from './../CarCategory/carCategory.model';
 
 const getCars = async (req, res) => {
     try {
@@ -210,7 +216,6 @@ const deleteCar = async (req, res) => {
     }
 };
 
-
 const getCarsDashboard = async (req, res) => {
     try {
         const query = { deletedAt: null };
@@ -221,12 +226,6 @@ const getCarsDashboard = async (req, res) => {
             {
                 $facet: {
                     totalCars: [{ $count: 'count' }],
-                    totalBrands: [{ $group: { _id: '$brand' } }, { $count: 'count' }],
-                    totalCarModels: [{ $group: { _id: '$carModel' } }, { $count: 'count' }],
-                    totalCarCategories: [{ $group: { _id: '$carCategory' } }, { $count: 'count' }],
-                    totalCarRegistrationTypes: [{ $group: { _id: '$carRegistrationType' } }, { $count: 'count' }],
-                    totalCarTransmissionTypes: [{ $group: { _id: '$carTransmissionType' } }, { $count: 'count' }],
-                    totalFuelTypes: [{ $group: { _id: '$fuelType' } }, { $count: 'count' }],
                     latestCars: [
                         { $sort: { createdAt: -1 } },
                         { $limit: 10 },
@@ -291,6 +290,23 @@ const getCarsDashboard = async (req, res) => {
 
         const result = await Cars.aggregate(aggregation);
 
+        // Get total counts from respective models (only active records)
+        const [
+            totalBrands,
+            totalCarModels,
+            totalCarCategories,
+            totalCarRegistrationTypes,
+            totalCarTransmissionTypes,
+            totalFuelTypes
+        ] = await Promise.all([
+            Brand.countDocuments({ deletedAt: null }), // Assuming Brand model has similar structure
+            CarModel.countDocuments({ deletedAt: null }), // Assuming CarModel model
+            CarCategory.countDocuments({ deletedAt: null }), // Assuming CarCategory model
+            CarRegistrationType.countDocuments({ deletedAt: null }), // Assuming CarRegistrationType model
+            CarTransmissionType.countDocuments({ deletedAt: null }), // Assuming CarTransmissionType model
+            FuelType.countDocuments({ deletedAt: null }) // Assuming FuelType model
+        ]);
+
         const data = result[0] || {};
 
         return createResponse({
@@ -300,12 +316,12 @@ const getCarsDashboard = async (req, res) => {
             message: 'Cars dashboard data retrieved successfully',
             data: {
                 totalCars: data.totalCars[0]?.count || 0,
-                totalBrands: data.totalBrands[0]?.count || 0,
-                totalCarModels: data.totalCarModels[0]?.count || 0,
-                totalCarCategories: data.totalCarCategories[0]?.count || 0,
-                totalCarRegistrationTypes: data.totalCarRegistrationTypes[0]?.count || 0,
-                totalCarTransmissionTypes: data.totalCarTransmissionTypes[0]?.count || 0,
-                totalFuelTypes: data.totalFuelTypes[0]?.count || 0,
+                totalBrands: totalBrands || 0,
+                totalCarModels: totalCarModels || 0,
+                totalCarCategories: totalCarCategories || 0,
+                totalCarRegistrationTypes: totalCarRegistrationTypes || 0,
+                totalCarTransmissionTypes: totalCarTransmissionTypes || 0,
+                totalFuelTypes: totalFuelTypes || 0,
                 latestCars: data.latestCars || []
             }
         });
