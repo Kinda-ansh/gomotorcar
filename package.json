@@ -14,7 +14,9 @@
     "forever-stop": "forever stopall",
     "forever-restart": "npm run build && forever restartall",
     "forever-restartall": "forever restartall",
-    "forever-list": "forever list"
+    "forever-list": "forever list",
+    "postinstall": "npx puppeteer browsers install chrome",
+    "install-chrome": "npx puppeteer browsers install chrome"
   },
   "keywords": [],
   "author": "",

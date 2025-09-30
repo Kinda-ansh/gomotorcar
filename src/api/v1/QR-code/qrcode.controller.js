@@ -292,13 +292,29 @@ const generateQRCodePDF = async (series, codes) => {
 
         console.log('Starting PDF generation with Puppeteer...');
 
-        // Launch puppeteer with minimal configuration first
+        // Launch puppeteer with production-ready configuration
+        const isProduction = process.env.NODE_ENV === 'production';
+
         browser = await puppeteer.launch({
             headless: true,
             args: [
                 '--no-sandbox',
-                '--disable-setuid-sandbox'
-            ]
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process'
+            ],
+            // For production environments, try to use system Chrome if available
+            ...(isProduction && {
+                executablePath: process.env.CHROME_EXECUTABLE_PATH ||
+                    '/usr/bin/google-chrome-stable' ||
+                    '/usr/bin/chromium-browser' ||
+                    undefined
+            })
         });
 
         console.log('Browser launched, creating page...');
@@ -341,6 +357,14 @@ const generateQRCodePDF = async (series, codes) => {
         if (browser) {
             await browser.close().catch(console.error);
         }
+
+        // If Chrome is not available, throw a specific error
+        if (error.message.includes('Could not find Chrome')) {
+            const chromeError = new Error('Chrome browser not available for PDF generation. Please install Chrome or use alternative download format.');
+            chromeError.code = 'CHROME_NOT_FOUND';
+            throw chromeError;
+        }
+
         throw error;
     }
 };
@@ -977,7 +1001,18 @@ const downloadQRCodes = async (req, res) => {
                     codeCount: codesToDownload.length
                 });
 
-                // Fallback to text file if PDF generation fails
+                // Check if it's a Chrome installation issue
+                if (pdfError.code === 'CHROME_NOT_FOUND' || pdfError.message.includes('Could not find Chrome')) {
+                    return createResponse({
+                        res,
+                        statusCode: httpStatus.SERVICE_UNAVAILABLE,
+                        status: false,
+                        message: 'PDF generation service temporarily unavailable. Chrome browser not installed on server. Please contact administrator.',
+                        error: 'Chrome browser required for PDF generation is not available on this server.'
+                    });
+                }
+
+                // Fallback to enhanced text file if PDF generation fails
                 res.setHeader('Content-Type', 'text/plain');
                 res.setHeader('Content-Disposition', `attachment; filename="qr-codes-${series.apartmentCode}-${series.code}.txt"`);
 
