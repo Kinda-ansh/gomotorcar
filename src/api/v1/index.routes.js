@@ -16,6 +16,7 @@ import rolesPermissionRoutes from './RolesAndPermissions/RolesPermission.route';
 import carsRoutes from './Car/Cars.route';
 import gettingStartedRoutes from './getting-started/getting-started.route';
 import requestedClutersRouteRoutes from './RequestedClusters/RequestedClusters.route';
+import qrcodeRoutes from './QR-code/qrcode.route';
 
 const { FileUploadController } = require('./common/fileupload.controller');
 const { upload, uploadFile, uploadMultipleFiles } = FileUploadController;
@@ -36,6 +37,7 @@ router.use('/roles-permissions', rolesPermissionRoutes);
 router.use('/cars', carsRoutes);
 router.use('/getting-started', gettingStartedRoutes);
 router.use('/requested-clusters', requestedClutersRouteRoutes);
+router.use('/qr-codes', qrcodeRoutes);
 
 // router.post('/version', VersionController.matchVersion);
 router.post('/version-create', VersionController.createVersion);
