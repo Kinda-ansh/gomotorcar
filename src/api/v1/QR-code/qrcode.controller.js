@@ -293,8 +293,8 @@ const generateQRCodePDF = async (series, codes, retryCount = 0) => {
 
         console.log('Starting PDF generation with Puppeteer...');
 
-        // Launch puppeteer with more stable configuration
-        browser = await puppeteer.launch({
+        // Configure Puppeteer executable path
+        const puppeteerConfig = {
             headless: true,
             args: [
                 '--no-sandbox',
@@ -311,7 +311,16 @@ const generateQRCodePDF = async (series, codes, retryCount = 0) => {
             // Increase timeout and improve stability
             protocolTimeout: 120000,
             timeout: 120000
-        });
+        };
+
+        // Use environment variable for executable path (for production/Render)
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+            console.log('Using custom Chrome executable:', process.env.PUPPETEER_EXECUTABLE_PATH);
+        }
+
+        // Launch puppeteer with configuration
+        browser = await puppeteer.launch(puppeteerConfig);
 
         console.log('Browser launched, creating page...');
         const page = await browser.newPage();
