@@ -24,9 +24,10 @@ import QRCode from 'qrcode';
  * - A4 format with proper margins
  * @param {Object} series - QR code series data
  * @param {Array} codes - Array of individual QR codes to generate
+ * @param {number} retryCount - Number of retries (default: 0)
  * @returns {Buffer} PDF buffer
  */
-const generateQRCodePDF = async (series, codes) => {
+const generateQRCodePDF = async (series, codes, retryCount = 0) => {
     let browser;
     try {
         // Read logo file
@@ -292,9 +293,7 @@ const generateQRCodePDF = async (series, codes) => {
 
         console.log('Starting PDF generation with Puppeteer...');
 
-        // Launch puppeteer with production-ready configuration
-        const isProduction = process.env.NODE_ENV === 'production';
-
+        // Launch puppeteer with more stable configuration
         browser = await puppeteer.launch({
             headless: true,
             args: [
@@ -305,47 +304,57 @@ const generateQRCodePDF = async (series, codes) => {
                 '--disable-web-security',
                 '--disable-features=VizDisplayCompositor',
                 '--no-first-run',
-                '--no-zygote',
-                '--single-process'
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ],
-            // For production environments, try to use system Chrome if available
-            ...(isProduction && {
-                executablePath: process.env.CHROME_EXECUTABLE_PATH ||
-                    '/usr/bin/google-chrome-stable' ||
-                    '/usr/bin/chromium-browser' ||
-                    undefined
-            })
+            // Increase timeout and improve stability
+            protocolTimeout: 120000,
+            timeout: 120000
         });
 
         console.log('Browser launched, creating page...');
         const page = await browser.newPage();
 
-        console.log('Setting content...');
-        // Use simpler content loading
-        await page.setContent(htmlContent, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000
+        // Set page timeout and error handling
+        page.setDefaultTimeout(120000);
+        page.setDefaultNavigationTimeout(120000);
+
+        // Handle page errors
+        page.on('error', (err) => {
+            console.error('Page error:', err);
         });
 
-        console.log('Generating PDF...');
-        const pdfBuffer = await Promise.race([
-            page.pdf({
-                format: 'A4',
-                printBackground: true,
-                margin: {
-                    top: '15mm',
-                    bottom: '15mm',
-                    left: '15mm',
-                    right: '15mm'
-                }
-            }),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('PDF generation timeout')), 30000)
-            )
-        ]);
+        page.on('pageerror', (err) => {
+            console.error('Page script error:', err);
+        });
 
+        console.log('Setting content...');
+        await page.setContent(htmlContent, {
+            waitUntil: 'domcontentloaded',
+            timeout: 120000
+        });
+
+        // Wait for images to load
+        console.log('Waiting for images to load...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        console.log('Generating PDF...');
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: {
+                top: '15mm',
+                bottom: '15mm',
+                left: '15mm',
+                right: '15mm'
+            },
+            timeout: 120000
+        });
+
+        console.log('Closing browser...');
         await browser.close();
-        console.log(`PDF generation completed, buffer size: ${pdfBuffer.length} bytes`);
+        console.log(`PDF generation completed successfully, buffer size: ${pdfBuffer.length} bytes`);
         return pdfBuffer;
 
     } catch (error) {
@@ -363,6 +372,13 @@ const generateQRCodePDF = async (series, codes) => {
             const chromeError = new Error('Chrome browser not available for PDF generation. Please install Chrome or use alternative download format.');
             chromeError.code = 'CHROME_NOT_FOUND';
             throw chromeError;
+        }
+
+        // If target closed error and we haven't retried yet, try once more
+        if (error.message.includes('Target closed') && retryCount < 2) {
+            console.log(`Target closed error, retrying... (attempt ${retryCount + 1})`);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            return generateQRCodePDF(series, codes, retryCount + 1);
         }
 
         throw error;
@@ -915,11 +931,16 @@ const downloadQRCodes = async (req, res) => {
             console.log(`Filtered to ${codesToDownload.length} codes for range ${fromIndex}-${toIndex}`);
         }
 
-        // Limit to reasonable number of codes to avoid memory issues
-        if (codesToDownload.length > 50) {
-            console.log(`Limiting from ${codesToDownload.length} to 50 codes to prevent memory issues`);
-            codesToDownload = codesToDownload.slice(0, 50);
+        // Only limit codes for range downloads to prevent excessive single requests
+        // Allow full download when explicitly downloading all
+        if (range && codesToDownload.length > 100) {
+            console.log(`Limiting range download from ${codesToDownload.length} to 100 codes`);
+            codesToDownload = codesToDownload.slice(0, 100);
         }
+
+        console.log(`Preparing to download ${codesToDownload.length} QR codes`);
+        console.log(`Download type: ${serials ? 'serials' : range ? 'range' : 'all'}`);
+
 
         if (codesToDownload.length === 0) {
             return createResponse({
@@ -959,6 +980,14 @@ const downloadQRCodes = async (req, res) => {
                 // Convert to Buffer if it's not already
                 const pdfBufferAsBuffer = Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
 
+                // Validate PDF buffer starts with PDF header
+                const pdfHeader = pdfBufferAsBuffer.slice(0, 4).toString();
+                if (pdfHeader !== '%PDF') {
+                    throw new Error(`Invalid PDF format. Buffer starts with: ${pdfHeader}`);
+                }
+
+                console.log(`Valid PDF buffer confirmed, starts with: ${pdfHeader}`);
+
                 // Update status of downloaded QR codes to 'printed'
                 try {
                     const codesToUpdate = codesToDownload.map(code => ({
@@ -990,8 +1019,10 @@ const downloadQRCodes = async (req, res) => {
                 res.setHeader('Content-Disposition', `attachment; filename="qr-codes-${series.apartmentCode}-${series.code}.pdf"`);
                 res.setHeader('Content-Length', pdfBufferAsBuffer.length);
                 res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Accept-Ranges', 'bytes');
 
-                return res.end(pdfBufferAsBuffer, 'binary');
+                // Send the PDF buffer directly
+                return res.send(pdfBufferAsBuffer);
             } catch (pdfError) {
                 console.error('PDF generation error details:', {
                     message: pdfError.message,
