@@ -4,13 +4,10 @@ const { join } = require('path');
  * @type {import("puppeteer").Configuration}
  */
 module.exports = {
-    // Skip Chromium download on npm install
-    skipDownload: true,
+    // Allow Puppeteer to download Chrome during build
+    skipDownload: false,
 
-    // Use system Chrome/Chromium from environment variable or default path
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
-
-    // Cache directory (not used since we skip download)
+    // Cache directory for Puppeteer's Chrome
     cacheDirectory: join(__dirname, '.cache', 'puppeteer'),
 };
 

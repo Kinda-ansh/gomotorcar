@@ -3,21 +3,20 @@
 ## ✅ Pre-Deployment Checklist
 
 ### Files to Commit:
-- [x] `Aptfile` - Installs Chromium on Render
-- [x] `.puppeteerrc.cjs` - Configures Puppeteer
-- [x] `render.yaml` - Deployment configuration
+- [x] `.puppeteerrc.cjs` - Configures Puppeteer cache
+- [x] `render.yaml` - Deployment configuration with Chrome installation
 - [x] `package.json` - Updated (removed postinstall)
-- [x] `src/api/v1/QR-code/qrcode.controller.js` - Uses env var for Chrome path
+- [x] `src/api/v1/QR-code/qrcode.controller.js` - Smart Chrome path detection
 
 ### What to Push to GitHub:
 ```bash
-git add Aptfile
 git add .puppeteerrc.cjs
 git add render.yaml
 git add package.json
 git add src/api/v1/QR-code/qrcode.controller.js
 git add DEPLOYMENT.md
-git commit -m "Fix: Configure Chromium for Render deployment (QR PDF generation)"
+git add RENDER_DEPLOYMENT_CHECKLIST.md
+git commit -m "Fix: Use Puppeteer Chrome for PDF generation on Render"
 git push origin main
 ```
 
@@ -35,28 +34,30 @@ git push origin main
 3. Connect your GitHub repository
 4. Render will detect `render.yaml` automatically
 5. Or manually configure:
-   - **Build Command:** `npm ci && npm run build`
+   - **Build Command:** `npm ci && npx puppeteer browsers install chrome && npm run build`
    - **Start Command:** `npm run serve`
-   - **Environment Variables:**
-     - `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` = `true`
-     - `PUPPETEER_EXECUTABLE_PATH` = `/usr/bin/chromium-browser`
-     - (Plus your other env vars: DB_URL, JWT_SECRET, etc.)
+   - **Environment Variables:** (your existing env vars: DB_URL, JWT_SECRET, etc.)
+   - No additional Puppeteer env vars needed!
 
 ## 🔍 Verification
 
 ### During Build (Check Logs):
 Look for these in the build logs:
 ```
-✓ Detecting apt dependencies
-✓ Installing chromium chromium-sandbox
-✓ chromium installed successfully
+> npx puppeteer browsers install chrome
+Installing @puppeteer/browsers...
+Chrome installed successfully
 ```
 
 ### After Deployment:
 1. Test PDF download from your app
-2. Check server logs for:
+2. Check server logs for one of these:
    ```
-   Using custom Chrome executable: /usr/bin/chromium-browser
+   Found system Chrome/Chromium at: /usr/bin/chromium
+   ```
+   OR
+   ```
+   No system Chrome found, Puppeteer will use its own installed Chrome
    Browser launched, creating page...
    PDF generation completed successfully
    ```
@@ -64,25 +65,29 @@ Look for these in the build logs:
 ## ❌ Troubleshooting
 
 ### If Build Fails:
-1. **"Aptfile not found"**
-   - Make sure `Aptfile` is in the root of your repo
-   - Check it's committed to git
-
-2. **"chromium-browser: not found"**
-   - Build succeeded but Chromium not installed
-   - Check Render build logs for apt installation
+1. **"Cannot find module @puppeteer/browsers"**
+   - Make sure build command includes: `npx puppeteer browsers install chrome`
+   - Check `render.yaml` is properly configured
    - Try manual redeploy
 
-3. **"Could not find Chrome"**
-   - Environment variable not set correctly
-   - Go to Render Dashboard → Environment
-   - Add: `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser`
+2. **"Failed to install Chrome"**
+   - Network issue during build
+   - Try manual redeploy
+   - Check build logs for specific error
+
+3. **Build succeeds but no Chrome installed**
+   - Verify build command in Render dashboard
+   - Should see "npx puppeteer browsers install chrome" in logs
+   - Check for Chrome installation messages
 
 ### If PDF Download Fails (503):
 1. Check server logs in Render dashboard
-2. Look for Puppeteer errors
-3. Verify Chromium installed: Check build logs
-4. Test endpoint manually:
+2. Look for specific error:
+   - **"Tried to find the browser at..."** → Chrome path issue
+   - **"Could not find Chrome"** → Chrome not installed
+3. Verify Chrome was installed during build
+4. Check server logs show "Puppeteer will use its own installed Chrome"
+5. Test endpoint manually:
    ```
    GET https://your-app.onrender.com/api/v1/qr-codes/{seriesId}/download?format=pdf
    ```
@@ -102,10 +107,11 @@ Look for these in the build logs:
 
 ## 💡 Tips
 
-1. **First deployment** after this change will take ~3-5 minutes (Chromium installation)
-2. **Subsequent deployments** will be faster (~2-3 minutes) - Chromium is cached
-3. **Build size** reduced by ~100MB (not downloading Puppeteer's Chrome)
-4. **Memory usage** optimized for Render's free tier
+1. **First deployment** after this change will take ~3-5 minutes (Chrome download ~100MB)
+2. **Subsequent deployments** may be faster if Render caches the Chrome installation
+3. **Chrome size** is ~100MB - this is normal for Puppeteer Chrome
+4. **Memory usage** optimized for Render's free tier with proper flags
+5. **Cache directory** is `.cache/puppeteer` - this gets cleared on each build on Render
 
 ## 🔗 Resources
 

@@ -313,10 +313,35 @@ const generateQRCodePDF = async (series, codes, retryCount = 0) => {
             timeout: 120000
         };
 
-        // Use environment variable for executable path (for production/Render)
-        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        // Try to find Chrome/Chromium executable
+        // First, check if environment variable is set
+        if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
             puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-            console.log('Using custom Chrome executable:', process.env.PUPPETEER_EXECUTABLE_PATH);
+            console.log('Using Chrome from env var:', process.env.PUPPETEER_EXECUTABLE_PATH);
+        } else {
+            // Check common system paths for Chromium/Chrome
+            const systemPaths = [
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chromium',
+                '/usr/bin/google-chrome-stable',
+                '/usr/bin/google-chrome',
+                '/snap/bin/chromium'
+            ];
+
+            let foundSystemChrome = false;
+            for (const tryPath of systemPaths) {
+                if (fs.existsSync(tryPath)) {
+                    puppeteerConfig.executablePath = tryPath;
+                    console.log('Found system Chrome/Chromium at:', tryPath);
+                    foundSystemChrome = true;
+                    break;
+                }
+            }
+
+            if (!foundSystemChrome) {
+                console.log('No system Chrome found, Puppeteer will use its own installed Chrome');
+                // Don't set executablePath - let Puppeteer find its own installed Chrome
+            }
         }
 
         // Launch puppeteer with configuration

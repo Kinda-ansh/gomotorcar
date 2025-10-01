@@ -8,23 +8,24 @@ This application uses Puppeteer to generate QR code PDFs. It requires Chrome or 
 
 **✅ All files are already configured!**
 
-1. The `Aptfile` will automatically install Chromium
-2. The `render.yaml` has the correct environment variables
-3. The `.puppeteerrc.cjs` configures Puppeteer to use system Chromium
+1. The `render.yaml` has the correct build command to install Chrome
+2. The `.puppeteerrc.cjs` configures Puppeteer cache directory
+3. The controller auto-detects Chrome location
 
 **Steps to Deploy:**
 1. Push your code to GitHub
 2. Connect your repo to Render
 3. Render will automatically:
-   - Install Chromium from `Aptfile`
-   - Set `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser`
-   - Skip Puppeteer's Chrome download (saves build time)
-   - Run `npm ci && npm run build`
+   - Run `npm ci`
+   - Install Chrome via `npx puppeteer browsers install chrome`
+   - Build the application
+   - Chrome will be available in Puppeteer's cache
 
-**Environment Variables (already in render.yaml):**
-```yaml
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+**Build Command (already in render.yaml):**
+```bash
+npm ci
+npx puppeteer browsers install chrome
+npm run build
 ```
 
 ### For Docker Deployment:
@@ -37,15 +38,25 @@ docker run -p 8080:8080 gomotor-backend
 
 ### For Ubuntu/Debian Servers:
 
-**Option 1: Install Chromium (Lightweight - Recommended)**
+**Option 1: Use Puppeteer's Chrome (Recommended - Easiest)**
+```bash
+# Install dependencies and Chrome
+npm ci
+npx puppeteer browsers install chrome
+
+# Build and run
+npm run build
+npm run serve
+```
+
+**Option 2: Install System Chromium**
 ```bash
 # Install Chromium
 sudo apt-get update
 sudo apt-get install -y chromium-browser
 
-# Set environment variable
+# Set environment variable to use system Chromium
 export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Install dependencies and run
 npm ci
@@ -53,7 +64,7 @@ npm run build
 npm run serve
 ```
 
-**Option 2: Install Google Chrome (Heavier)**
+**Option 3: Install Google Chrome**
 ```bash
 # Install Chrome
 wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
@@ -63,17 +74,26 @@ sudo apt-get install -y google-chrome-stable
 
 # Set environment variable
 export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
-export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
+# Install and run
+npm ci
+npm run build
+npm run serve
 ```
 
 ### For Other Hosting Services (Heroku, Railway, etc.):
 
-1. **Add Chromium buildpack** or install via package manager
-2. **Set environment variables:**
+**Option 1: Use Puppeteer's Chrome (Recommended)**
+1. Add to your build command:
+   ```bash
+   npm ci && npx puppeteer browsers install chrome && npm run build
    ```
-   PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-   PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-   ```
+2. No environment variables needed
+3. Deploy your code
+
+**Option 2: Use System Chrome**
+1. Add Chromium buildpack or install via package manager
+2. Set environment variable: `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser`
 3. Deploy your code
 
 ## Troubleshooting
@@ -102,13 +122,13 @@ export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
    ```
 
 4. **Render.com specific:**
-   - Check that `Aptfile` exists in your repo
-   - Verify build logs show "Installing chromium"
-   - Environment variables are set in render.yaml
+   - Check build logs show "Installing @puppeteer/browsers"
+   - Verify Chrome was downloaded during build
+   - Check for "Found Chrome/Chromium at:" or "Puppeteer will use its own installed Chrome" in logs
 
 ### Build Takes Too Long
 
-✅ **Fixed!** We now skip Puppeteer's Chrome download, using system Chromium instead. This saves ~100MB and 1-2 minutes on each build.
+The build includes Chrome installation (~100MB download). This is normal and takes 1-3 minutes. Subsequent builds on Render may be faster if cache is preserved.
 
 ### Memory Issues
 
@@ -120,14 +140,14 @@ If you see "Target closed" errors:
 ## What Changed (Latest Update)
 
 **New Configuration (Production-Ready):**
-- ✅ Uses system Chromium (lightweight, faster builds)
-- ✅ Skips Puppeteer Chrome download
-- ✅ Auto-installs via `Aptfile` on Render
-- ✅ Environment variable configuration
+- ✅ Uses Puppeteer's own Chrome installation (most reliable)
+- ✅ Auto-installs Chrome during build via `npx puppeteer browsers install chrome`
+- ✅ Smart path detection (tries env var → system paths → Puppeteer's Chrome)
+- ✅ Works on all platforms (Render, Docker, Ubuntu, etc.)
 - ✅ Proper error handling with fallback to text format
 
 **Files Added/Updated:**
-- `Aptfile` - Auto-installs Chromium on Render
-- `.puppeteerrc.cjs` - Configures Puppeteer to skip download
-- `render.yaml` - Correct environment variables
-- `qrcode.controller.js` - Uses env var for executable path
+- `.puppeteerrc.cjs` - Configures Puppeteer cache directory
+- `render.yaml` - Includes Chrome installation in build command
+- `qrcode.controller.js` - Smart Chrome path detection with fallbacks
+- `DEPLOYMENT.md` - Complete deployment guide
