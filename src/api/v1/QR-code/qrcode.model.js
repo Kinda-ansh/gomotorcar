@@ -12,30 +12,69 @@ const qrCodeSchema = new Schema(
             trim: true,
             get: (val) => getFormattedCode('QR', val),
         },
-        prefix: { type: String, required: true },
-        city: { type: String, trim: true },
-        apartmentName: { type: String, trim: true },
-        apartmentCode: { type: String, trim: true },
-        qrCodeSeries: { type: String, trim: true },
-        qrCodeSeriesStart: { type: Number, trim: true },
-        qrCodeSeriesEnd: { type: Number, trim: true },
-        qrCodePicture: { type: String },
-        generatedCodes: [
-            {
-                serial: { type: Number, required: true },
-                startingQrCodeId: { type: String, required: true },
-                endingQrCodeId: { type: String, required: true },
-                stickerTrackingNo: { type: String },
-
-                status: {
-                    type: String,
-                    enum: ["unused", "printed", "assigned", "scanned"],
-                    default: "unused",
-                },
-                printedAt: { type: Date },
-                printedBy: { type: String },
-            },
-        ],
+        series: {
+            type: Schema.Types.ObjectId,
+            ref: 'QRCodeSeries',
+            required: true,
+        },
+        assigned: {
+            type: Boolean,
+            default: false
+        },
+        printed: {
+            type: Boolean,
+            default: false
+        },
+        scanned: {
+            type: Boolean,
+            default: false
+        },
+       
+        image_data: {
+            type: String,
+            default: null
+        },
+        generated_at: {
+            type: Date,
+            default: Date.now
+        },
+        generated_by: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            default: null
+        },
+        assigned_to: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            default: null
+        },
+        assigned_at: {
+            type: Date,
+            default: null
+        },
+        scanned_at: [{
+            type: Date,
+            default: null
+        }],
+        scanned_by: [{
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            default: null
+        }],
+        printed_at: {
+            type: Date,
+            default: null
+        },
+        printed_by: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            default: null
+        },
+        metadata: {
+            type: Map,
+            of: String,
+            default: {}
+        },
         createdBy: {
             type: Schema.Types.ObjectId,
             ref: 'User',
@@ -73,8 +112,8 @@ qrCodeSchema.methods.softDelete = async function (userId) {
 // Removed mongoose-unique-validator to avoid false positives with soft delete
 qrCodeSchema.plugin(AutoIncrement, {
     inc_field: 'code',
-    id: 'qrCodeSeries',
+    id: 'QRCode',
 });
 
-const QRCodeSeries = model('QRCodeSeries', qrCodeSchema);
-export default QRCodeSeries;
+const QRCode = model('QRCode', qrCodeSchema);
+export default QRCode;

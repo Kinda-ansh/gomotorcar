@@ -17,6 +17,7 @@ import carsRoutes from './Car/Cars.route';
 import gettingStartedRoutes from './getting-started/getting-started.route';
 import requestedClutersRouteRoutes from './RequestedClusters/RequestedClusters.route';
 import qrcodeRoutes from './QR-code/qrcode.route';
+import qrcodeSeriesRoutes from './qrcode-series/qrcode-series.route';
 
 const { FileUploadController } = require('./common/fileupload.controller');
 const { upload, uploadFile, uploadMultipleFiles } = FileUploadController;
@@ -38,6 +39,7 @@ router.use('/cars', carsRoutes);
 router.use('/getting-started', gettingStartedRoutes);
 router.use('/requested-clusters', requestedClutersRouteRoutes);
 router.use('/qr-codes', qrcodeRoutes);
+router.use('/qrcode-series', qrcodeSeriesRoutes);
 
 // router.post('/version', VersionController.matchVersion);
 router.post('/version-create', VersionController.createVersion);
