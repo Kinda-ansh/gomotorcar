@@ -34,9 +34,14 @@ const getCars = async (req, res) => {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate('brand', 'name code')
-                .populate('carModel', 'name code')
-                .populate('carCategory', 'name code')
+                .populate({
+                    path: 'carModel',
+                    select: 'name code brand carCategory',
+                    populate: [
+                        { path: 'brand', select: 'name code' },
+                        { path: 'carCategory', select: 'name code' }
+                    ]
+                })
                 .populate('carRegistrationType', 'name code')
                 .populate('carTransmissionType', 'name code')
                 .populate('fuelType', 'name code'),
@@ -94,9 +99,14 @@ const getCar = async (req, res) => {
     try {
         const id = getIdFromParams(req);
         const record = await Cars.findOne({ _id: id, deletedAt: null })
-            .populate('brand', 'name code')
-            .populate('carModel', 'name code')
-            .populate('carCategory', 'name code')
+            .populate({
+                path: 'carModel',
+                select: 'name code brand carCategory',
+                populate: [
+                    { path: 'brand', select: 'name code' },
+                    { path: 'carCategory', select: 'name code' }
+                ]
+            })
             .populate('carRegistrationType', 'name code')
             .populate('carTransmissionType', 'name code')
             .populate('fuelType', 'name code');
@@ -142,9 +152,14 @@ const updateCar = async (req, res) => {
             { $set: data },
             { new: true }
         )
-            .populate('brand', 'name code')
-            .populate('carModel', 'name code')
-            .populate('carCategory', 'name code')
+            .populate({
+                path: 'carModel',
+                select: 'name code brand carCategory',
+                populate: [
+                    { path: 'brand', select: 'name code' },
+                    { path: 'carCategory', select: 'name code' }
+                ]
+            })
             .populate('carRegistrationType', 'name code')
             .populate('carTransmissionType', 'name code')
             .populate('fuelType', 'name code');
@@ -231,15 +246,6 @@ const getCarsDashboard = async (req, res) => {
                         { $limit: 10 },
                         {
                             $lookup: {
-                                from: 'brands',
-                                localField: 'brand',
-                                foreignField: '_id',
-                                as: 'brand'
-                            }
-                        },
-                        { $unwind: { path: '$brand', preserveNullAndEmptyArrays: true } },
-                        {
-                            $lookup: {
                                 from: 'carmodels',
                                 localField: 'carModel',
                                 foreignField: '_id',
@@ -249,13 +255,22 @@ const getCarsDashboard = async (req, res) => {
                         { $unwind: { path: '$carModel', preserveNullAndEmptyArrays: true } },
                         {
                             $lookup: {
-                                from: 'carcategories',
-                                localField: 'carCategory',
+                                from: 'brands',
+                                localField: 'carModel.brand',
                                 foreignField: '_id',
-                                as: 'carCategory'
+                                as: 'carModel.brand'
                             }
                         },
-                        { $unwind: { path: '$carCategory', preserveNullAndEmptyArrays: true } },
+                        { $unwind: { path: '$carModel.brand', preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: 'carcategories',
+                                localField: 'carModel.carCategory',
+                                foreignField: '_id',
+                                as: 'carModel.carCategory'
+                            }
+                        },
+                        { $unwind: { path: '$carModel.carCategory', preserveNullAndEmptyArrays: true } },
                         {
                             $lookup: {
                                 from: 'carregistrationtypes',

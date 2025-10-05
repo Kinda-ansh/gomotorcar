@@ -46,6 +46,20 @@ const generateQRCodes = async (req, res) => {
         const starting = parseInt(range.trim().split('-')[0]);
         const ending = parseInt(range.trim().split('-')[1]);
 
+        // Parse series range to validate against
+        const seriesRangeStart = parseInt(seriesData.range.trim().split('-')[0]);
+        const seriesRangeEnd = parseInt(seriesData.range.trim().split('-')[1]);
+
+        // Validate that requested range is within series range
+        if (starting < seriesRangeStart || ending > seriesRangeEnd || starting > seriesRangeEnd || ending < seriesRangeStart) {
+            return createResponse({
+                res,
+                statusCode: httpStatus.BAD_REQUEST,
+                status: false,
+                message: `Invalid range. QR codes can only be generated within the series range ${seriesData.range}. Requested range: ${range}`,
+            });
+        }
+
         // Check if codes in this range are already generated
         let generatedRange = seriesData.generated_range;
         let generatedStarting = starting;
@@ -68,7 +82,8 @@ const generateQRCodes = async (req, res) => {
         // Generate QR code IDs array
         const qrCodesIDArray = [];
         for (let i = starting; i <= ending; i++) {
-            const id = seriesData.name + '_' + i;
+            const paddedSerial = i.toString().padStart(3, '0');
+            const id = seriesData.identifierNumber + '-' + paddedSerial;
             qrCodesIDArray.push(id);
         }
 
@@ -120,26 +135,24 @@ const generateQRCodes = async (req, res) => {
 
             // Generate QR code image
             try {
-                const qrResponse = await axios.get(
-                    `http://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(encryptedString)}&size=350x350&charset-source=ISO-8859-1&ecc=H&format=svg`,
-                    { timeout: 10000 }
-                );
+                // Generate QR code as PNG data URL
+                const qrImageUrl = `http://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(encryptedString)}&size=150x150&charset-source=ISO-8859-1&ecc=H`;
 
-                // Modify SVG to include QR code ID
-                let qrSVG = qrResponse.data;
-                const splitted = qrSVG.split('</g>');
-                qrSVG = splitted[0] +
-                    `<text x="50%" font-size="22" y="360" text-anchor="middle" fill="black" font-weight="bold">${qrCodeId}</text>` +
-                    '</g>' + splitted[1];
-                // Increase height to accommodate text
-                qrSVG = qrSVG.replace('width="291"', 'width="400"');
-                qrSVG = qrSVG.replace('height="291"', 'height="400"');
-                qrSVG = qrSVG.replace('<svg', '<svg viewBox="0 0 400 400"');
+                // Generate simple QR code SVG (no card wrapper - frontend will handle the card)
+                const qrCodeSVG = await QRCodeGenerator.toString(encryptedString, {
+                    type: 'svg',
+                    width: 150,
+                    margin: 1,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF'
+                    }
+                });
 
                 // Update QR code with image data
                 await QRCodeModel.findByIdAndUpdate(
                     qrcode._id,
-                    { image_data: qrSVG }
+                    { image_data: qrCodeSVG }
                 );
 
                 qrCodesData.push({
@@ -172,7 +185,8 @@ const generateQRCodes = async (req, res) => {
         // Set next_to_assign if not already set
         if (!seriesData.next_to_assign) {
             const rangeStart = seriesData.range.trim().split('-')[0];
-            updateData.next_to_assign = seriesData.name + '_' + rangeStart;
+            const paddedSerial = rangeStart.padStart(3, '0');
+            updateData.next_to_assign = seriesData.identifierNumber + '-' + paddedSerial;
         }
 
         await QRCodeSeriesModel.findByIdAndUpdate(
@@ -249,6 +263,20 @@ const printQRCodes = async (req, res) => {
         const starting = parseInt(range.trim().split('-')[0]);
         const ending = parseInt(range.trim().split('-')[1]);
 
+        // Parse series range to validate against
+        const seriesRangeStart = parseInt(seriesData.range.trim().split('-')[0]);
+        const seriesRangeEnd = parseInt(seriesData.range.trim().split('-')[1]);
+
+        // Validate that requested range is within series range
+        if (starting < seriesRangeStart || ending > seriesRangeEnd || starting > seriesRangeEnd || ending < seriesRangeStart) {
+            return createResponse({
+                res,
+                statusCode: httpStatus.BAD_REQUEST,
+                status: false,
+                message: `Invalid range. QR codes can only be printed within the series range ${seriesData.range}. Requested range: ${range}`,
+            });
+        }
+
         // Check if QR codes are generated for this range
         const generatedRange = seriesData.generated_range;
         if (!generatedRange) {
@@ -276,7 +304,8 @@ const printQRCodes = async (req, res) => {
         // Generate QR code IDs array for the requested range
         const qrCodesIDArray = [];
         for (let i = starting; i <= ending; i++) {
-            const id = seriesData.name + '_' + i;
+            const paddedSerial = i.toString().padStart(3, '0');
+            const id = seriesData.identifierNumber + '-' + paddedSerial;
             qrCodesIDArray.push(id);
         }
 
@@ -288,10 +317,10 @@ const printQRCodes = async (req, res) => {
             deletedAt: null,
             'metadata.qr_code_id': { $in: qrCodesIDArray }
         })
-            .populate('series', 'name code prefix range')
+            .populate('series', 'name code identifierNumber range')
             .populate('generated_by', 'name email')
             .populate('printed_by', 'name email')
-            .sort({ 'metadata.sequence': 1 });
+            .sort({ 'metadata.sequence': 1, generated_at: 1 });
 
         if (qrCodesData.length === 0) {
             return createResponse({
@@ -330,12 +359,12 @@ const printQRCodes = async (req, res) => {
                 series: {
                     name: seriesData.name,
                     code: seriesData.code,
-                    prefix: seriesData.prefix
+                    identifierNumber: seriesData.identifierNumber
                 },
                 qr_codes: qrCodesData.map(qr => ({
                     _id: qr._id,
                     code: qr.code,
-                    qr_code_id: qr.metadata?.get('qr_code_id'),
+                    qr_code_id: qr.metadata.get('qr_code_id'),
                     image_data: qr.image_data,
                     status: qr.status,
                     generated_at: qr.generated_at,
@@ -422,11 +451,11 @@ const getGeneratedQRCodes = async (req, res) => {
         // Get QR codes with pagination
         const [qrCodes, totalCount, statusCounts] = await Promise.all([
             QRCodeModel.find(query)
-                .populate('series', 'name code prefix range')
+                .populate('series', 'name code identifierNumber range')
                 .populate('generated_by', 'name email')
                 .populate('assigned_to', 'name email')
                 .populate('printed_by', 'name email')
-                .sort({ 'metadata.sequence': 1, generated_at: -1 })
+                .sort({ 'metadata.sequence': 1, generated_at: 1 })
                 .skip(parseInt(skip))
                 .limit(parseInt(limit)),
             QRCodeModel.countDocuments(query),
@@ -471,8 +500,8 @@ const getGeneratedQRCodes = async (req, res) => {
                 list: qrCodes.map(qr => ({
                     _id: qr._id,
                     code: qr.code,
-                    qr_code_id: qr.metadata?.get('qr_code_id'),
-                    sequence: qr.metadata?.get('sequence'),
+                    qr_code_id: qr.metadata.get('qr_code_id'),
+                    sequence: qr.metadata.get('sequence'),
                     assigned: qr.assigned,
                     printed: qr.printed,
                     scanned: qr.scanned,

@@ -12,32 +12,32 @@ const carSchema = new Schema(
             trim: true,
             get: (val) => getFormattedCode('CAR', val),
         },
-        name: {
-            type: String,
-            required: [true, 'Name is required'],
-            trim: true
-        },
+        // name: {
+        //     type: String,
+        //     required: [true, 'Name is required'],
+        //     trim: true
+        // },
         registrationNumber: {
             type: String,
             required: [true, 'Registration Number is required'],
             trim: true,
             index: true,
         },
-        brand: {
-            type: Schema.Types.ObjectId,
-            ref: 'Brand',
-            required: true,
-        },
+        // brand: {
+        //     type: Schema.Types.ObjectId,
+        //     ref: 'Brand',
+        //     required: true,
+        // },
         carModel: {
             type: Schema.Types.ObjectId,
             ref: 'CarModel',
             required: true,
         },
-        carCategory: {
-            type: Schema.Types.ObjectId,
-            ref: 'CarCategory',
-            required: true,
-        },
+        // carCategory: {
+        //     type: Schema.Types.ObjectId,
+        //     ref: 'CarCategory',
+        //     required: true,
+        // },
         carRegistrationType: {
             type: Schema.Types.ObjectId,
             ref: 'CarRegistrationType',

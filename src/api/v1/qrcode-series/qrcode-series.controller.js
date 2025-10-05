@@ -21,7 +21,7 @@ const getQRCodeSeries = async (req, res) => {
         if (search) {
             query.$or = getCommonSearchConditionForMasters(search, [
                 'name',
-                'prefix',
+                'identifierNumber',
                 'range',
                 'generated_range'
             ]);
@@ -35,7 +35,7 @@ const getQRCodeSeries = async (req, res) => {
 
         const [list, totalCount] = await Promise.all([
             QRCodeSeries.find(query)
-                .populate('cluster', 'name code address')
+               
                 .populate('qr_codes')
                 .populate('createdBy', 'name email')
                 .populate('updatedBy', 'name email')
@@ -77,7 +77,6 @@ const createQRCodeSeries = async (req, res) => {
 
         // Populate the created record for response
         const populatedRecord = await QRCodeSeries.findById(record._id)
-            .populate('cluster', 'name code address')
             .populate('qr_codes')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
@@ -105,7 +104,6 @@ const getQRCodeSeriesById = async (req, res) => {
     try {
         const id = getIdFromParams(req);
         const record = await QRCodeSeries.findOne({ _id: id, deletedAt: null })
-            .populate('cluster', 'name code address')
             .populate('qr_codes')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
@@ -152,7 +150,6 @@ const updateQRCodeSeries = async (req, res) => {
             { $set: data },
             { new: true, runValidators: true }
         )
-            .populate('cluster', 'name code address')
             .populate('qr_codes')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');

@@ -26,9 +26,8 @@ const nonEmptyString = (label) =>
 // Create QR Code Series Schema
 export const createQRCodeSeriesSchema = yup.object({
     name: yup.string().required('QR Code Series name is required').trim(),
-    prefix: yup.string().required('Prefix is required').trim(),
+    identifierNumber: yup.string().required('identifierNumber is required').trim(),
     range: yup.string().required('Range is required').trim(),
-    cluster: requiredObjectId,
     qr_codes: yup
         .array()
         .of(requiredObjectId)
@@ -45,9 +44,8 @@ export const createQRCodeSeriesSchema = yup.object({
 // Update QR Code Series Schema
 export const updateQRCodeSeriesSchema = yup.object({
     name: nonEmptyString('QR Code Series name'),
-    prefix: nonEmptyString('Prefix'),
+    identifierNumber: nonEmptyString('identifierNumber'),
     range: nonEmptyString('Range'),
-    cluster: objectId,
     qr_codes: yup
         .array()
         .of(requiredObjectId)

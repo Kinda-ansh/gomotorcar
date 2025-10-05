@@ -17,17 +17,13 @@ const qrCodeSeriesSchema = new Schema(
             unique: true,
             trim: true
         },
-        prefix: { type: String, required: true },
+        identifierNumber: { type: String, required: true },
         range: {
             type: String,
             trim: true,
             required: [true, "QR Code Series Range is required."]
         },
-        cluster: {
-            type: Schema.Types.ObjectId,
-            ref: 'Cluster',
-            required: true,
-        },
+       
         qr_codes: [{
             type: Schema.Types.ObjectId,
             ref: 'QRCode',
