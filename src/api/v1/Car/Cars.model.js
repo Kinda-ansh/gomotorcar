@@ -23,11 +23,11 @@ const carSchema = new Schema(
             trim: true,
             index: true,
         },
-        // brand: {
-        //     type: Schema.Types.ObjectId,
-        //     ref: 'Brand',
-        //     required: true,
-        // },
+        brand: {
+            type: Schema.Types.ObjectId,
+            ref: 'Brand',
+            required: true,
+        },
         carModel: {
             type: Schema.Types.ObjectId,
             ref: 'CarModel',

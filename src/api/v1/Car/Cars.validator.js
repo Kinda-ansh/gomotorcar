@@ -19,6 +19,7 @@ const nonEmptyString = (label) =>
 export const createCarSchema = yup.object({
     // name: yup.string().required('Name is required').trim(),
     registrationNumber: yup.string().required('Registration Number is required').trim(),
+    brand: objectId.required('Brand is required'),
     carModel: objectId.required('Car model is required'),
     carRegistrationType: objectId.required('Car registration type is required'),
     carTransmissionType: objectId.required('Car transmission type is required'),
@@ -31,6 +32,8 @@ export const createCarSchema = yup.object({
 export const updateCarSchema = yup.object({
     // name: nonEmptyString('Name'),
     registrationNumber: nonEmptyString('Registration Number'),
+    brand: objectId.optional(),
+    carModel: objectId.optional(),
     carCategory: objectId.optional(),
     carRegistrationType: objectId.optional(),
     carTransmissionType: objectId.optional(),

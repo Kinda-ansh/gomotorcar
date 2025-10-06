@@ -34,6 +34,7 @@ const getCars = async (req, res) => {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
+                .populate('brand', 'name code')
                 .populate({
                     path: 'carModel',
                     select: 'name code brand carCategory',
@@ -99,6 +100,7 @@ const getCar = async (req, res) => {
     try {
         const id = getIdFromParams(req);
         const record = await Cars.findOne({ _id: id, deletedAt: null })
+            .populate('brand', 'name code')
             .populate({
                 path: 'carModel',
                 select: 'name code brand carCategory',
@@ -152,6 +154,7 @@ const updateCar = async (req, res) => {
             { $set: data },
             { new: true }
         )
+            .populate('brand', 'name code')
             .populate({
                 path: 'carModel',
                 select: 'name code brand carCategory',
@@ -244,6 +247,15 @@ const getCarsDashboard = async (req, res) => {
                     latestCars: [
                         { $sort: { createdAt: -1 } },
                         { $limit: 10 },
+                        {
+                            $lookup: {
+                                from: 'brands',
+                                localField: 'brand',
+                                foreignField: '_id',
+                                as: 'brand'
+                            }
+                        },
+                        { $unwind: { path: '$brand', preserveNullAndEmptyArrays: true } },
                         {
                             $lookup: {
                                 from: 'carmodels',

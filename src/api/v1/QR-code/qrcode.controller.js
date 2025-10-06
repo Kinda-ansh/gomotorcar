@@ -446,8 +446,7 @@ const getGeneratedQRCodes = async (req, res) => {
             }
         }
 
-        console.log('Query:', JSON.stringify(query));
-
+ 
         // Get QR codes with pagination
         const [qrCodes, totalCount, statusCounts] = await Promise.all([
             QRCodeModel.find(query)
@@ -455,7 +454,7 @@ const getGeneratedQRCodes = async (req, res) => {
                 .populate('generated_by', 'name email')
                 .populate('assigned_to', 'name email')
                 .populate('printed_by', 'name email')
-                .sort({ 'metadata.sequence': 1, generated_at: 1 })
+                .sort({ generated_at: -1 })
                 .skip(parseInt(skip))
                 .limit(parseInt(limit)),
             QRCodeModel.countDocuments(query),
