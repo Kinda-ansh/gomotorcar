@@ -4,7 +4,7 @@ import { getFormattedCode } from '../../../utils/commonHelper';
 const { Schema, model } = mongoose;
 const AutoIncrement = require('mongoose-sequence')(mongoose);
 
-// Sub-schema for Cleaner Payment Rate
+// Sub-schema for Cleaner Payment Rate (nested inside category)
 const cleanerPaymentRateSchema = new Schema({
     internalCleaning: {
         type: Number,
@@ -18,7 +18,7 @@ const cleanerPaymentRateSchema = new Schema({
     }
 }, { _id: false });
 
-// Sub-schema for Customer Refund Rate
+// Sub-schema for Customer Refund Rate (nested inside category)
 const customerRefundRateSchema = new Schema({
     internalCleaning: {
         type: Number,
@@ -29,6 +29,49 @@ const customerRefundRateSchema = new Schema({
         type: Number,
         required: [true, 'External cleaning refund rate is required'],
         min: [0, 'External cleaning refund rate cannot be negative']
+    }
+}, { _id: false });
+
+// Sub-schema for Category Pricing (contains all pricing details per category)
+const categoryPricingSchema = new Schema({
+    carCategory: {
+        type: Schema.Types.ObjectId,
+        ref: 'CarCategory',
+        required: [true, 'Car category is required']
+    },
+    strikeOffPrice: {
+        type: Number,
+        required: [true, 'Strike off price is required'],
+        min: [0, 'Strike off price cannot be negative']
+    },
+    actualPrice: {
+        type: Number,
+        required: [true, 'Actual price is required'],
+        min: [0, 'Actual price cannot be negative'],
+        validate: {
+            validator: function (value) {
+                return value <= this.strikeOffPrice;
+            },
+            message: 'Actual price cannot exceed strike off price'
+        }
+    },
+    taxAmount: {
+        type: Number,
+        default: 0,
+        min: [0, 'Tax amount cannot be negative']
+    },
+    totalAmount: {
+        type: Number,
+        default: 0,
+        min: [0, 'Total amount cannot be negative']
+    },
+    cleanerPaymentRate: {
+        type: cleanerPaymentRateSchema,
+        required: [true, 'Cleaner payment rate is required']
+    },
+    customerRefundRate: {
+        type: customerRefundRateSchema,
+        required: [true, 'Customer refund rate is required']
     }
 }, { _id: false });
 
@@ -95,36 +138,15 @@ const packageSchema = new Schema(
             ref: 'Cluster',
             default: null
         },
-        carCategory: {
-            type: Schema.Types.ObjectId,
-            ref: 'CarCategory',
-            required: [true, 'Car category is required']
-        },
-        strikeOffPrice: {
-            type: Number,
-            required: [true, 'Strike off price is required'],
-            min: [0, 'Strike off price cannot be negative']
-        },
-        actualPrice: {
-            type: Number,
-            required: [true, 'Actual price is required'],
-            min: [0, 'Actual price cannot be negative'],
+        categoryPricing: {
+            type: [categoryPricingSchema],
+            required: [true, 'At least one category pricing is required'],
             validate: {
                 validator: function (value) {
-                    return value <= this.strikeOffPrice;
+                    return value && value.length > 0;
                 },
-                message: 'Actual price cannot exceed strike off price'
+                message: 'At least one category pricing is required'
             }
-        },
-        taxAmount: {
-            type: Number,
-            default: 0,
-            min: [0, 'Tax amount cannot be negative']
-        },
-        totalAmount: {
-            type: Number,
-            default: 0,
-            min: [0, 'Total amount cannot be negative']
         },
         packageStatus: {
             type: String,
@@ -146,14 +168,6 @@ const packageSchema = new Schema(
         taxDetails: {
             type: taxDetailsSchema,
             default: () => ({ taxApplicable: false, taxRate: 0 })
-        },
-        cleanerPaymentRate: {
-            type: cleanerPaymentRateSchema,
-            required: [true, 'Cleaner payment rate is required']
-        },
-        customerRefundRate: {
-            type: customerRefundRateSchema,
-            required: [true, 'Customer refund rate is required']
         },
         description: {
             type: String,
@@ -198,27 +212,28 @@ const packageSchema = new Schema(
     }
 );
 
-// Pre-save middleware to calculate tax amount and total amount
+// Pre-save middleware to calculate tax amount and total amount for each category
 packageSchema.pre('save', function (next) {
-    if (this.taxDetails.taxApplicable && this.taxDetails.taxRate > 0) {
-        this.taxAmount = (this.actualPrice * this.taxDetails.taxRate) / 100;
-    } else {
-        this.taxAmount = 0;
+    if (this.categoryPricing && this.categoryPricing.length > 0) {
+        this.categoryPricing.forEach(category => {
+            if (this.taxDetails.taxApplicable && this.taxDetails.taxRate > 0) {
+                category.taxAmount = (category.actualPrice * this.taxDetails.taxRate) / 100;
+            } else {
+                category.taxAmount = 0;
+            }
+            category.totalAmount = category.actualPrice + category.taxAmount;
+        });
     }
-
-    this.totalAmount = this.actualPrice + this.taxAmount;
     next();
 });
 
 // Pre-findOneAndUpdate middleware to calculate tax and total on update
-packageSchema.pre('findOneAndUpdate', function (next) {
+packageSchema.pre('findOneAndUpdate', async function (next) {
     const update = this.getUpdate();
     const setData = update.$set || update;
 
-    if (setData.actualPrice !== undefined ||
-        setData['taxDetails.taxApplicable'] !== undefined ||
-        setData['taxDetails.taxRate'] !== undefined) {
-
+    // Handle categoryPricing updates
+    if (setData.categoryPricing) {
         const taxApplicable = setData['taxDetails.taxApplicable'] !== undefined
             ? setData['taxDetails.taxApplicable']
             : (setData.taxDetails && setData.taxDetails.taxApplicable);
@@ -227,14 +242,69 @@ packageSchema.pre('findOneAndUpdate', function (next) {
             ? setData['taxDetails.taxRate']
             : (setData.taxDetails && setData.taxDetails.taxRate);
 
-        const actualPrice = setData.actualPrice;
+        // If we have direct access to tax details, use them
+        // Otherwise we need to fetch the document
+        if (taxApplicable !== undefined && taxRate !== undefined) {
+            setData.categoryPricing.forEach(category => {
+                if (taxApplicable && taxRate > 0) {
+                    category.taxAmount = (category.actualPrice * taxRate) / 100;
+                } else {
+                    category.taxAmount = 0;
+                }
+                category.totalAmount = category.actualPrice + category.taxAmount;
+            });
+        } else {
+            // Fetch the current document to get tax details
+            const docToUpdate = await this.model.findOne(this.getQuery());
+            if (docToUpdate) {
+                const currentTaxApplicable = docToUpdate.taxDetails.taxApplicable;
+                const currentTaxRate = docToUpdate.taxDetails.taxRate;
 
-        if (actualPrice !== undefined && taxApplicable && taxRate > 0) {
-            setData.taxAmount = (actualPrice * taxRate) / 100;
-            setData.totalAmount = actualPrice + setData.taxAmount;
-        } else if (actualPrice !== undefined) {
-            setData.taxAmount = 0;
-            setData.totalAmount = actualPrice;
+                setData.categoryPricing.forEach(category => {
+                    if (currentTaxApplicable && currentTaxRate > 0) {
+                        category.taxAmount = (category.actualPrice * currentTaxRate) / 100;
+                    } else {
+                        category.taxAmount = 0;
+                    }
+                    category.totalAmount = category.actualPrice + category.taxAmount;
+                });
+            }
+        }
+    }
+
+    // Handle tax details updates - need to recalculate all category pricing
+    if (setData['taxDetails.taxApplicable'] !== undefined ||
+        setData['taxDetails.taxRate'] !== undefined ||
+        (setData.taxDetails && (setData.taxDetails.taxApplicable !== undefined || setData.taxDetails.taxRate !== undefined))) {
+
+        // Fetch the current document to update all categories
+        const docToUpdate = await this.model.findOne(this.getQuery());
+        if (docToUpdate && docToUpdate.categoryPricing) {
+            const taxApplicable = setData['taxDetails.taxApplicable'] !== undefined
+                ? setData['taxDetails.taxApplicable']
+                : (setData.taxDetails && setData.taxDetails.taxApplicable !== undefined)
+                    ? setData.taxDetails.taxApplicable
+                    : docToUpdate.taxDetails.taxApplicable;
+
+            const taxRate = setData['taxDetails.taxRate'] !== undefined
+                ? setData['taxDetails.taxRate']
+                : (setData.taxDetails && setData.taxDetails.taxRate !== undefined)
+                    ? setData.taxDetails.taxRate
+                    : docToUpdate.taxDetails.taxRate;
+
+            // Update all categories with new tax calculation
+            const updatedCategoryPricing = docToUpdate.categoryPricing.map(category => {
+                const categoryObj = category.toObject ? category.toObject() : category;
+                if (taxApplicable && taxRate > 0) {
+                    categoryObj.taxAmount = (categoryObj.actualPrice * taxRate) / 100;
+                } else {
+                    categoryObj.taxAmount = 0;
+                }
+                categoryObj.totalAmount = categoryObj.actualPrice + categoryObj.taxAmount;
+                return categoryObj;
+            });
+
+            setData.categoryPricing = updatedCategoryPricing;
         }
     }
 
@@ -251,13 +321,13 @@ packageSchema.methods.softDelete = async function (userId) {
 // Indexes for better query performance
 packageSchema.index({ name: 1 });
 packageSchema.index({ cluster: 1 });
-packageSchema.index({ carCategory: 1 });
+packageSchema.index({ 'categoryPricing.carCategory': 1 });
 packageSchema.index({ packageStatus: 1 });
 packageSchema.index({ deletedAt: 1 });
 packageSchema.index({ createdAt: -1 });
 
 // Compound index for common queries
-packageSchema.index({ cluster: 1, carCategory: 1, packageStatus: 1, deletedAt: 1 });
+packageSchema.index({ cluster: 1, packageStatus: 1, deletedAt: 1 });
 
 // Auto-increment plugin
 packageSchema.plugin(AutoIncrement, {

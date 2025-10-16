@@ -47,6 +47,33 @@ const customerRefundRateSchema = yup.object({
         .required('External cleaning refund rate is required')
 });
 
+// Category Pricing Schema
+const categoryPricingSchema = yup.object({
+    carCategory: requiredObjectId,
+    strikeOffPrice: yup
+        .number()
+        .min(0, 'Strike off price cannot be negative')
+        .required('Strike off price is required'),
+    actualPrice: yup
+        .number()
+        .min(0, 'Actual price cannot be negative')
+        .required('Actual price is required')
+        .test('price-comparison', 'Actual price cannot exceed strike off price', function (value) {
+            const { strikeOffPrice } = this.parent;
+            return value <= strikeOffPrice;
+        }),
+    taxAmount: yup
+        .number()
+        .min(0, 'Tax amount cannot be negative')
+        .optional(),
+    totalAmount: yup
+        .number()
+        .min(0, 'Total amount cannot be negative')
+        .optional(),
+    cleanerPaymentRate: cleanerPaymentRateSchema.required('Cleaner payment rate is required'),
+    customerRefundRate: customerRefundRateSchema.required('Customer refund rate is required')
+});
+
 // Tax Details Schema
 const taxDetailsSchema = yup.object({
     taxApplicable: yup.boolean().default(false),
@@ -81,18 +108,16 @@ export const createPackageSchema = yup.object({
         .trim()
         .required('Internal name is required'),
     cluster: objectId,
-    carCategory: requiredObjectId,
-    strikeOffPrice: yup
-        .number()
-        .min(0, 'Strike off price cannot be negative')
-        .required('Strike off price is required'),
-    actualPrice: yup
-        .number()
-        .min(0, 'Actual price cannot be negative')
-        .required('Actual price is required')
-        .test('price-comparison', 'Actual price cannot exceed strike off price', function (value) {
-            const { strikeOffPrice } = this.parent;
-            return value <= strikeOffPrice;
+    categoryPricing: yup
+        .array()
+        .of(categoryPricingSchema)
+        .min(1, 'At least one category pricing is required')
+        .required('Category pricing is required')
+        .test('unique-categories', 'Duplicate car categories are not allowed', function (value) {
+            if (!value || value.length === 0) return true;
+            const categories = value.map(item => item.carCategory);
+            const uniqueCategories = new Set(categories);
+            return categories.length === uniqueCategories.size;
         }),
     packageStatus: yup
         .string()
@@ -110,8 +135,6 @@ export const createPackageSchema = yup.object({
         .default('available')
         .lowercase(),
     taxDetails: taxDetailsSchema.default(() => ({ taxApplicable: false, taxRate: 0 })),
-    cleanerPaymentRate: cleanerPaymentRateSchema.required('Cleaner payment rate is required'),
-    customerRefundRate: customerRefundRateSchema.required('Customer refund rate is required'),
     description: yup
         .string()
         .trim()
@@ -147,21 +170,16 @@ export const updatePackageSchema = yup.object({
     name: nonEmptyString('Package name'),
     internalName: nonEmptyString('Internal name'),
     cluster: objectId,
-    carCategory: objectId,
-    strikeOffPrice: yup
-        .number()
-        .min(0, 'Strike off price cannot be negative')
-        .optional(),
-    actualPrice: yup
-        .number()
-        .min(0, 'Actual price cannot be negative')
+    categoryPricing: yup
+        .array()
+        .of(categoryPricingSchema)
+        .min(1, 'At least one category pricing is required')
         .optional()
-        .test('price-comparison', 'Actual price cannot exceed strike off price', function (value) {
-            const { strikeOffPrice } = this.parent;
-            if (value !== undefined && strikeOffPrice !== undefined) {
-                return value <= strikeOffPrice;
-            }
-            return true;
+        .test('unique-categories', 'Duplicate car categories are not allowed', function (value) {
+            if (!value || value.length === 0) return true;
+            const categories = value.map(item => item.carCategory);
+            const uniqueCategories = new Set(categories);
+            return categories.length === uniqueCategories.size;
         }),
     packageStatus: yup
         .string()
@@ -179,8 +197,6 @@ export const updatePackageSchema = yup.object({
         .lowercase()
         .optional(),
     taxDetails: taxDetailsSchema.optional(),
-    cleanerPaymentRate: cleanerPaymentRateSchema.optional(),
-    customerRefundRate: customerRefundRateSchema.optional(),
     description: yup
         .string()
         .trim()

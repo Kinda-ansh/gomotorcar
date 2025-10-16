@@ -35,9 +35,9 @@ const getPackages = async (req, res) => {
             query.cluster = req.query.cluster;
         }
 
-        // Filter by car category
+        // Filter by car category (search within categoryPricing array)
         if (req.query.carCategory) {
-            query.carCategory = req.query.carCategory;
+            query['categoryPricing.carCategory'] = req.query.carCategory;
         }
 
         // Filter by approval status if provided
@@ -62,7 +62,7 @@ const getPackages = async (req, res) => {
         const [list, totalCount, approvedCount, pendingCount, rejectedCount] = await Promise.all([
             Package.find(query)
                 .populate('cluster', 'code name')
-                .populate('carCategory', 'code name')
+                .populate('categoryPricing.carCategory', 'code name')
                 .populate('createdBy', 'name email')
                 .populate('updatedBy', 'name email')
                 .sort({ createdAt: -1 })
@@ -130,20 +130,13 @@ const createPackage = async (req, res) => {
             data.cluster = null;
         }
 
-        // Ensure tax and total are calculated (will be recalculated in pre-save hook anyway)
-        if (data.taxDetails && data.taxDetails.taxApplicable && data.taxDetails.taxRate > 0) {
-            data.taxAmount = (data.actualPrice * data.taxDetails.taxRate) / 100;
-        } else {
-            data.taxAmount = 0;
-        }
-        data.totalAmount = data.actualPrice + (data.taxAmount || 0);
-
+        // Tax amount and total amount will be calculated automatically in pre-save hook
         const record = await Package.create(data);
 
         // Populate the created record
         await record.populate([
             { path: 'cluster', select: 'code name' },
-            { path: 'carCategory', select: 'code name' },
+            { path: 'categoryPricing.carCategory', select: 'code name' },
             { path: 'createdBy', select: 'name email' },
             { path: 'updatedBy', select: 'name email' }
         ]);
@@ -177,7 +170,7 @@ const getPackage = async (req, res) => {
         const id = getIdFromParams(req);
         const record = await Package.findOne({ _id: id, deletedAt: null })
             .populate('cluster', 'code name address')
-            .populate('carCategory', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
 
@@ -231,7 +224,7 @@ const updatePackage = async (req, res) => {
             { new: true, runValidators: true }
         )
             .populate('cluster', 'code name')
-            .populate('carCategory', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
 
@@ -321,7 +314,7 @@ const getPackagesByCluster = async (req, res) => {
             isActive: true,
             packageStatus: 'active'
         })
-            .populate('carCategory', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .sort({ createdAt: -1 });
 
         return createResponse({
@@ -350,12 +343,13 @@ const getPackagesByCarCategory = async (req, res) => {
         const carCategoryId = req.params.carCategoryId;
 
         const packages = await Package.find({
-            carCategory: carCategoryId,
+            'categoryPricing.carCategory': carCategoryId,
             deletedAt: null,
             isActive: true,
             packageStatus: 'active'
         })
             .populate('cluster', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .sort({ createdAt: -1 });
 
         return createResponse({
@@ -395,7 +389,7 @@ const approvePackage = async (req, res) => {
             { new: true, runValidators: true }
         )
             .populate('cluster', 'code name')
-            .populate('carCategory', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
 
@@ -455,7 +449,7 @@ const rejectPackage = async (req, res) => {
             { new: true, runValidators: true }
         )
             .populate('cluster', 'code name')
-            .populate('carCategory', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email');
 
@@ -507,7 +501,7 @@ const getPackagesByApprovalStatus = async (req, res) => {
             deletedAt: null
         })
             .populate('cluster', 'code name')
-            .populate('carCategory', 'code name')
+            .populate('categoryPricing.carCategory', 'code name')
             .populate('createdBy', 'name email')
             .populate('updatedBy', 'name email')
             .sort({ createdAt: -1 });
