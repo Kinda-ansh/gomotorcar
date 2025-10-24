@@ -35,8 +35,12 @@ export const removeNullValues = (value) => {
   return value;
 };
 
-export const getFormattedCode = (prefix, value) =>
-  prefix + value?.toString()?.padStart(4, '0');
+export const getFormattedCode = (prefix, value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return prefix + value.toString().padStart(4, '0');
+};
 
 export const getCommonSearchConditionForMasters = (search, fields = []) => {
   const isNumeric = !isNaN(search);

@@ -21,5 +21,8 @@ router.get('/approval-status/:status', auth, PackageController.getPackagesByAppr
 router.get('/cluster/:clusterId', auth, PackageController.getPackagesByCluster);
 router.get('/car-category/:carCategoryId', auth, PackageController.getPackagesByCarCategory);
 
+// Category pricing routes
+router.get('/category-pricing/all', auth, PackageController.getAllCategoryPricing);
+
 export default router;
 

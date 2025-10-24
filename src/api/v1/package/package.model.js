@@ -4,6 +4,11 @@ import { getFormattedCode } from '../../../utils/commonHelper';
 const { Schema, model } = mongoose;
 const AutoIncrement = require('mongoose-sequence')(mongoose);
 
+// Helper function to generate categoryPackageId
+const generateCategoryPackageId = (packageCode, carCategoryCode) => {
+    return `${packageCode}-${carCategoryCode}`;
+};
+
 // Sub-schema for Cleaner Payment Rate (nested inside category)
 const cleanerPaymentRateSchema = new Schema({
     internalCleaning: {
@@ -34,6 +39,11 @@ const customerRefundRateSchema = new Schema({
 
 // Sub-schema for Category Pricing (contains all pricing details per category)
 const categoryPricingSchema = new Schema({
+    categoryPackageId: {
+        type: String,
+        trim: true,
+        // This will be generated automatically: PKG0004-CC0001
+    },
     carCategory: {
         type: Schema.Types.ObjectId,
         ref: 'CarCategory',
@@ -227,88 +237,187 @@ packageSchema.pre('save', function (next) {
     next();
 });
 
-// Pre-findOneAndUpdate middleware to calculate tax and total on update
-packageSchema.pre('findOneAndUpdate', async function (next) {
-    const update = this.getUpdate();
-    const setData = update.$set || update;
+// Post-save middleware to generate categoryPackageId after code is set by auto-increment
+packageSchema.post('save', async function (doc, next) {
+    try {
+        // Only generate categoryPackageId for new documents or if missing
+        if (doc.categoryPricing && doc.categoryPricing.length > 0) {
+            // Access the raw numeric code value (not the formatted getter)
+            const rawCode = doc.get('code', null, { getters: false });
 
-    // Handle categoryPricing updates
-    if (setData.categoryPricing) {
-        const taxApplicable = setData['taxDetails.taxApplicable'] !== undefined
-            ? setData['taxDetails.taxApplicable']
-            : (setData.taxDetails && setData.taxDetails.taxApplicable);
+            if (rawCode !== null && rawCode !== undefined) {
+                let needsUpdate = false;
 
-        const taxRate = setData['taxDetails.taxRate'] !== undefined
-            ? setData['taxDetails.taxRate']
-            : (setData.taxDetails && setData.taxDetails.taxRate);
+                // Get the package code (formatted from raw numeric value)
+                const packageCode = getFormattedCode('PKG', rawCode);
 
-        // If we have direct access to tax details, use them
-        // Otherwise we need to fetch the document
-        if (taxApplicable !== undefined && taxRate !== undefined) {
-            setData.categoryPricing.forEach(category => {
-                if (taxApplicable && taxRate > 0) {
-                    category.taxAmount = (category.actualPrice * taxRate) / 100;
-                } else {
-                    category.taxAmount = 0;
-                }
-                category.totalAmount = category.actualPrice + category.taxAmount;
-            });
-        } else {
-            // Fetch the current document to get tax details
-            const docToUpdate = await this.model.findOne(this.getQuery());
-            if (docToUpdate) {
-                const currentTaxApplicable = docToUpdate.taxDetails.taxApplicable;
-                const currentTaxRate = docToUpdate.taxDetails.taxRate;
-
-                setData.categoryPricing.forEach(category => {
-                    if (currentTaxApplicable && currentTaxRate > 0) {
-                        category.taxAmount = (category.actualPrice * currentTaxRate) / 100;
-                    } else {
-                        category.taxAmount = 0;
+                // Only proceed if we have a valid package code
+                if (packageCode) {
+                    // Process each category pricing
+                    for (let category of doc.categoryPricing) {
+                        // Generate categoryPackageId if not already set
+                        if (!category.categoryPackageId && category.carCategory) {
+                            const CarCategory = mongoose.model('CarCategory');
+                            const carCategoryDoc = await CarCategory.findById(category.carCategory);
+                            if (carCategoryDoc) {
+                                // Access raw numeric code for car category too
+                                const rawCategoryCode = carCategoryDoc.get('code', null, { getters: false });
+                                if (rawCategoryCode !== null && rawCategoryCode !== undefined) {
+                                    const carCategoryCode = getFormattedCode('CC', rawCategoryCode);
+                                    if (carCategoryCode) {
+                                        category.categoryPackageId = generateCategoryPackageId(packageCode, carCategoryCode);
+                                        needsUpdate = true;
+                                    }
+                                }
+                            }
+                        }
                     }
-                    category.totalAmount = category.actualPrice + category.taxAmount;
-                });
+
+                    // Update the document if we added categoryPackageId
+                    if (needsUpdate) {
+                        await Package.findByIdAndUpdate(doc._id, { categoryPricing: doc.categoryPricing });
+                    }
+                }
             }
         }
+        next();
+    } catch (error) {
+        next(error);
     }
+});
 
-    // Handle tax details updates - need to recalculate all category pricing
-    if (setData['taxDetails.taxApplicable'] !== undefined ||
-        setData['taxDetails.taxRate'] !== undefined ||
-        (setData.taxDetails && (setData.taxDetails.taxApplicable !== undefined || setData.taxDetails.taxRate !== undefined))) {
+// Pre-findOneAndUpdate middleware to calculate tax and total on update and generate categoryPackageId
+packageSchema.pre('findOneAndUpdate', async function (next) {
+    try {
+        const update = this.getUpdate();
+        const setData = update.$set || update;
 
-        // Fetch the current document to update all categories
-        const docToUpdate = await this.model.findOne(this.getQuery());
-        if (docToUpdate && docToUpdate.categoryPricing) {
-            const taxApplicable = setData['taxDetails.taxApplicable'] !== undefined
-                ? setData['taxDetails.taxApplicable']
-                : (setData.taxDetails && setData.taxDetails.taxApplicable !== undefined)
-                    ? setData.taxDetails.taxApplicable
-                    : docToUpdate.taxDetails.taxApplicable;
+        // Handle categoryPricing updates
+        if (setData.categoryPricing) {
+            // Get the current document to access package code and tax details
+            const docToUpdate = await this.model.findOne(this.getQuery());
+            if (docToUpdate) {
+                // Access the raw numeric code value (not the formatted getter)
+                const rawCode = docToUpdate.get('code', null, { getters: false });
 
-            const taxRate = setData['taxDetails.taxRate'] !== undefined
-                ? setData['taxDetails.taxRate']
-                : (setData.taxDetails && setData.taxDetails.taxRate !== undefined)
-                    ? setData.taxDetails.taxRate
-                    : docToUpdate.taxDetails.taxRate;
+                if (rawCode !== null && rawCode !== undefined) {
+                    const packageCode = getFormattedCode('PKG', rawCode);
 
-            // Update all categories with new tax calculation
-            const updatedCategoryPricing = docToUpdate.categoryPricing.map(category => {
-                const categoryObj = category.toObject ? category.toObject() : category;
-                if (taxApplicable && taxRate > 0) {
-                    categoryObj.taxAmount = (categoryObj.actualPrice * taxRate) / 100;
-                } else {
-                    categoryObj.taxAmount = 0;
+                    // Only proceed if we have a valid package code
+                    if (packageCode) {
+                        const taxApplicable = setData['taxDetails.taxApplicable'] !== undefined
+                            ? setData['taxDetails.taxApplicable']
+                            : (setData.taxDetails && setData.taxDetails.taxApplicable !== undefined)
+                                ? setData.taxDetails.taxApplicable
+                                : docToUpdate.taxDetails.taxApplicable;
+
+                        const taxRate = setData['taxDetails.taxRate'] !== undefined
+                            ? setData['taxDetails.taxRate']
+                            : (setData.taxDetails && setData.taxDetails.taxRate !== undefined)
+                                ? setData.taxDetails.taxRate
+                                : docToUpdate.taxDetails.taxRate;
+
+                        // Process each category pricing
+                        for (let category of setData.categoryPricing) {
+                            // Calculate tax and total amounts
+                            if (taxApplicable && taxRate > 0) {
+                                category.taxAmount = (category.actualPrice * taxRate) / 100;
+                            } else {
+                                category.taxAmount = 0;
+                            }
+                            category.totalAmount = category.actualPrice + category.taxAmount;
+
+                            // Generate categoryPackageId if not already set
+                            if (!category.categoryPackageId && category.carCategory) {
+                                const CarCategory = mongoose.model('CarCategory');
+                                const carCategoryDoc = await CarCategory.findById(category.carCategory);
+                                if (carCategoryDoc) {
+                                    // Access raw numeric code for car category too
+                                    const rawCategoryCode = carCategoryDoc.get('code', null, { getters: false });
+                                    if (rawCategoryCode !== null && rawCategoryCode !== undefined) {
+                                        const carCategoryCode = getFormattedCode('CC', rawCategoryCode);
+                                        if (carCategoryCode) {
+                                            category.categoryPackageId = generateCategoryPackageId(packageCode, carCategoryCode);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                categoryObj.totalAmount = categoryObj.actualPrice + categoryObj.taxAmount;
-                return categoryObj;
-            });
-
-            setData.categoryPricing = updatedCategoryPricing;
+            }
         }
-    }
 
-    next();
+        // Handle tax details updates - need to recalculate all category pricing
+        if (setData['taxDetails.taxApplicable'] !== undefined ||
+            setData['taxDetails.taxRate'] !== undefined ||
+            (setData.taxDetails && (setData.taxDetails.taxApplicable !== undefined || setData.taxDetails.taxRate !== undefined))) {
+
+            // Fetch the current document to update all categories
+            const docToUpdate = await this.model.findOne(this.getQuery());
+            if (docToUpdate && docToUpdate.categoryPricing) {
+                // Access the raw numeric code value (not the formatted getter)
+                const rawCode = docToUpdate.get('code', null, { getters: false });
+
+                if (rawCode !== null && rawCode !== undefined) {
+                    const packageCode = getFormattedCode('PKG', rawCode);
+
+                    // Only proceed if we have a valid package code
+                    if (packageCode) {
+                        const taxApplicable = setData['taxDetails.taxApplicable'] !== undefined
+                            ? setData['taxDetails.taxApplicable']
+                            : (setData.taxDetails && setData.taxDetails.taxApplicable !== undefined)
+                                ? setData.taxDetails.taxApplicable
+                                : docToUpdate.taxDetails.taxApplicable;
+
+                        const taxRate = setData['taxDetails.taxRate'] !== undefined
+                            ? setData['taxDetails.taxRate']
+                            : (setData.taxDetails && setData.taxDetails.taxRate !== undefined)
+                                ? setData.taxDetails.taxRate
+                                : docToUpdate.taxDetails.taxRate;
+
+                        // Update all categories with new tax calculation and ensure categoryPackageId
+                        const updatedCategoryPricing = [];
+                        for (let category of docToUpdate.categoryPricing) {
+                            const categoryObj = category.toObject ? category.toObject() : category;
+
+                            // Calculate tax and total amounts
+                            if (taxApplicable && taxRate > 0) {
+                                categoryObj.taxAmount = (categoryObj.actualPrice * taxRate) / 100;
+                            } else {
+                                categoryObj.taxAmount = 0;
+                            }
+                            categoryObj.totalAmount = categoryObj.actualPrice + categoryObj.taxAmount;
+
+                            // Ensure categoryPackageId exists
+                            if (!categoryObj.categoryPackageId && categoryObj.carCategory) {
+                                const CarCategory = mongoose.model('CarCategory');
+                                const carCategoryDoc = await CarCategory.findById(categoryObj.carCategory);
+                                if (carCategoryDoc) {
+                                    // Access raw numeric code for car category too
+                                    const rawCategoryCode = carCategoryDoc.get('code', null, { getters: false });
+                                    if (rawCategoryCode !== null && rawCategoryCode !== undefined) {
+                                        const carCategoryCode = getFormattedCode('CC', rawCategoryCode);
+                                        if (carCategoryCode) {
+                                            categoryObj.categoryPackageId = generateCategoryPackageId(packageCode, carCategoryCode);
+                                        }
+                                    }
+                                }
+                            }
+
+                            updatedCategoryPricing.push(categoryObj);
+                        }
+
+                        setData.categoryPricing = updatedCategoryPricing;
+                    }
+                }
+            }
+        }
+
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
 // Soft delete method
