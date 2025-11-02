@@ -19,6 +19,8 @@ import requestedClutersRouteRoutes from './RequestedClusters/RequestedClusters.r
 import qrcodeRoutes from './QR-code/qrcode.route';
 import qrcodeSeriesRoutes from './qrcode-series/qrcode-series.route';
 import packageRoutes from './package/package.route';
+import scheduleRoutes from './schedule/schedule.route';
+import cityHolidaysRoutes from './cityHolidays/cityHolidays.route';
 
 const { FileUploadController } = require('./common/fileupload.controller');
 const { upload, uploadFile, uploadMultipleFiles } = FileUploadController;
@@ -42,6 +44,9 @@ router.use('/requested-clusters', requestedClutersRouteRoutes);
 router.use('/qr-codes', qrcodeRoutes);
 router.use('/qrcode-series', qrcodeSeriesRoutes);
 router.use('/packages', packageRoutes);
+router.use('/schedule', scheduleRoutes);
+router.use('/city-holidays', cityHolidaysRoutes);
+
 
 // router.post('/version', VersionController.matchVersion);
 router.post('/version-create', VersionController.createVersion);

@@ -86,7 +86,7 @@ carSchema.methods.softDelete = async function (userId) {
     await this.save();
 };
 
-carSchema.index({ registrationNumber: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
+carSchema.index({ unique: true, partialFilterExpression: { deletedAt: null } });
 carSchema.plugin(uniqueValidator, { message: '{PATH} should be unique.' });
 carSchema.plugin(AutoIncrement, {
     inc_field: 'code',
