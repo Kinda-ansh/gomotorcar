@@ -110,7 +110,8 @@ const normalizeDate = (date) => {
 };
 
 /**
- * Generate schedule days automatically
+ * Generate schedule days automatically (LEGACY - for backward compatibility)
+ * This is only used if scheduleDays are not provided from the frontend
  */
 scheduleSchema.methods.generateScheduleDays = async function () {
     const scheduleDays = [];
@@ -179,7 +180,7 @@ scheduleSchema.methods.generateScheduleDays = async function () {
     this.workingDays = workingDaysCount;
 };
 
-// Pre-save hook to auto-generate schedule days
+// Pre-save hook to normalize dates and conditionally generate schedule days
 scheduleSchema.pre('save', async function (next) {
     try {
         // Normalize dates before saving using dayjs
@@ -190,13 +191,25 @@ scheduleSchema.pre('save', async function (next) {
             this.endDate = normalizeDate(this.endDate);
         }
 
-        // Generate schedule days if:
-        // 1. It's a new document (creating schedule)
-        // 2. startDate or endDate has been modified
-        // 3. cityHoliday has been modified
-        if (this.isNew || this.isModified('startDate') || this.isModified('endDate') || this.isModified('cityHoliday')) {
+        // Normalize scheduleDays dates if they exist
+        if (this.scheduleDays && this.scheduleDays.length > 0) {
+            this.scheduleDays = this.scheduleDays.map(day => ({
+                ...day,
+                date: normalizeDate(day.date)
+            }));
+        }
+
+        // Generate schedule days ONLY if:
+        // 1. scheduleDays array is empty or undefined (not provided from frontend)
+        // 2. AND it's a new document OR dates/cityHoliday have been modified
+        const shouldGenerateScheduleDays = (!this.scheduleDays || this.scheduleDays.length === 0) &&
+            (this.isNew || this.isModified('startDate') || this.isModified('endDate') || this.isModified('cityHoliday'));
+
+        if (shouldGenerateScheduleDays) {
+            // Auto-generate using the old logic (for backward compatibility)
             await this.generateScheduleDays();
         }
+
         next();
     } catch (error) {
         next(error);

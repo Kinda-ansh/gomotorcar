@@ -9,6 +9,7 @@ import Schedule from './schedule.model';
 import { createScheduleSchema, updateScheduleSchema } from './schedule.validator';
 import dayjs from '../../../utils/dayjs';
 import { IST } from '../../../utils/dayjs';
+
 const getSchedules = async (req, res) => {
     try {
         const { limit = 1000, skip = 0, search, isActive } = extractCommonQueryParams(req);
@@ -53,7 +54,7 @@ const getSchedules = async (req, res) => {
                 .populate('package', 'code name price duration')
                 .populate('customer', 'name email phone')
                 .populate('createdBy', 'name email')
-             
+
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit),
@@ -113,6 +114,26 @@ const createSchedule = async (req, res) => {
             }
         }
 
+        // Parse scheduleDays dates if provided
+        if (data.scheduleDays && Array.isArray(data.scheduleDays)) {
+            data.scheduleDays = data.scheduleDays.map(day => {
+                let parsedDate;
+                if (day.date instanceof Date) {
+                    const dateStr = day.date.toISOString().split('T')[0];
+                    parsedDate = dayjs.utc(dateStr).toDate();
+                } else {
+                    parsedDate = dayjs.utc(day.date).toDate();
+                }
+
+                return {
+                    ...day,
+                    date: parsedDate,
+                    isCompleted: day.isCompleted || false,
+                    notes: day.notes || null
+                };
+            });
+        }
+
         // Additional validation: Check if endDate is after startDate
         const startDate = dayjs.utc(data.startDate);
         const endDate = dayjs.utc(data.endDate);
@@ -141,7 +162,41 @@ const createSchedule = async (req, res) => {
             });
         }
 
-        // Schedule days will be generated automatically by the pre-save hook
+        // Validate scheduleDays if provided
+        if (data.scheduleDays && data.scheduleDays.length > 0) {
+            // Ensure all scheduleDays have valid dayType
+            const validDayTypes = ['internalCleaningDay', 'externalCleaningDay', 'holiday'];
+            const invalidDays = data.scheduleDays.filter(day => !validDayTypes.includes(day.dayType));
+
+            if (invalidDays.length > 0) {
+                return createResponse({
+                    res,
+                    statusCode: httpStatus.BAD_REQUEST,
+                    status: false,
+                    message: 'Invalid dayType in scheduleDays',
+                    error: 'dayType must be one of: internalCleaningDay, externalCleaningDay, holiday',
+                });
+            }
+
+            // Ensure all schedule days are within the date range
+            const invalidDateRangeDays = data.scheduleDays.filter(day => {
+                const dayDate = dayjs.utc(day.date);
+                return dayDate.isBefore(startDate, 'day') || dayDate.isAfter(endDate, 'day');
+            });
+
+            if (invalidDateRangeDays.length > 0) {
+                return createResponse({
+                    res,
+                    statusCode: httpStatus.BAD_REQUEST,
+                    status: false,
+                    message: 'Some schedule days are outside the start and end date range',
+                    error: 'All schedule days must be between startDate and endDate',
+                });
+            }
+        }
+
+        // Create the schedule with the data from frontend
+        // The frontend has already generated the scheduleDays with the correct logic
         const schedule = await Schedule.create(data);
 
         return createResponse({
@@ -200,6 +255,7 @@ const createSchedule = async (req, res) => {
         });
     }
 };
+
 const getSchedule = async (req, res) => {
     try {
         const id = getIdFromParams(req);
