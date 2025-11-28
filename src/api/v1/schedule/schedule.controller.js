@@ -9,7 +9,6 @@ import Schedule from './schedule.model';
 import { createScheduleSchema, updateScheduleSchema } from './schedule.validator';
 import dayjs from '../../../utils/dayjs';
 import { IST } from '../../../utils/dayjs';
-
 const getSchedules = async (req, res) => {
     try {
         const { limit = 1000, skip = 0, search, isActive } = extractCommonQueryParams(req);
@@ -89,38 +88,37 @@ const createSchedule = async (req, res) => {
             abortEarly: false,
         });
 
-        // Parse dates as UTC date strings (YYYY-MM-DD format)
-        // Don't apply timezone conversion - treat the input date as the actual calendar date
+        // Parse dates with explicit YYYY-MM-DD format to prevent timezone shifts
         if (data.startDate) {
-            // If it's already a Date object from Yup, extract the date string and parse as UTC
             if (data.startDate instanceof Date) {
-                // Get the ISO string and extract just the date part
                 const dateStr = data.startDate.toISOString().split('T')[0];
-                data.startDate = dayjs.utc(dateStr).toDate();
+                data.startDate = dayjs.utc(dateStr, 'YYYY-MM-DD').toDate();
             } else {
-                // If it's a string, parse directly as UTC
-                data.startDate = dayjs.utc(data.startDate).toDate();
+                const dateStr = data.startDate.split('T')[0];
+                data.startDate = dayjs.utc(dateStr, 'YYYY-MM-DD').toDate();
             }
         }
         if (data.endDate) {
-            // If it's already a Date object from Yup, extract the date string and parse as UTC
             if (data.endDate instanceof Date) {
-                // Get the ISO string and extract just the date part
                 const dateStr = data.endDate.toISOString().split('T')[0];
-                data.endDate = dayjs.utc(dateStr).toDate();
+                data.endDate = dayjs.utc(dateStr, 'YYYY-MM-DD').toDate();
             } else {
-                // If it's a string, parse directly as UTC
-                data.endDate = dayjs.utc(data.endDate).toDate();
+                const dateStr = data.endDate.split('T')[0];
+                data.endDate = dayjs.utc(dateStr, 'YYYY-MM-DD').toDate();
             }
         }
 
-        // Parse scheduleDays dates if provided
+        // Parse scheduleDays dates if provided from frontend
         if (data.scheduleDays && Array.isArray(data.scheduleDays)) {
             data.scheduleDays = data.scheduleDays.map(day => {
                 let parsedDate;
-                if (day.date instanceof Date) {
+
+                if (typeof day.date === 'string') {
+                    const dateStr = day.date.split('T')[0];
+                    parsedDate = dayjs.utc(dateStr, 'YYYY-MM-DD').toDate();
+                } else if (day.date instanceof Date) {
                     const dateStr = day.date.toISOString().split('T')[0];
-                    parsedDate = dayjs.utc(dateStr).toDate();
+                    parsedDate = dayjs.utc(dateStr, 'YYYY-MM-DD').toDate();
                 } else {
                     parsedDate = dayjs.utc(day.date).toDate();
                 }
@@ -150,7 +148,7 @@ const createSchedule = async (req, res) => {
 
         // Check if start date is not in the past
         const today = dayjs().tz(IST).startOf('day');
-        const todayUTC = dayjs.utc(today.format('YYYY-MM-DD'));
+        const todayUTC = dayjs.utc(today.format('YYYY-MM-DD'), 'YYYY-MM-DD');
 
         if (startDate.isBefore(todayUTC, 'day')) {
             return createResponse({
@@ -162,41 +160,8 @@ const createSchedule = async (req, res) => {
             });
         }
 
-        // Validate scheduleDays if provided
-        if (data.scheduleDays && data.scheduleDays.length > 0) {
-            // Ensure all scheduleDays have valid dayType
-            const validDayTypes = ['internalCleaningDay', 'externalCleaningDay', 'holiday'];
-            const invalidDays = data.scheduleDays.filter(day => !validDayTypes.includes(day.dayType));
-
-            if (invalidDays.length > 0) {
-                return createResponse({
-                    res,
-                    statusCode: httpStatus.BAD_REQUEST,
-                    status: false,
-                    message: 'Invalid dayType in scheduleDays',
-                    error: 'dayType must be one of: internalCleaningDay, externalCleaningDay, holiday',
-                });
-            }
-
-            // Ensure all schedule days are within the date range
-            const invalidDateRangeDays = data.scheduleDays.filter(day => {
-                const dayDate = dayjs.utc(day.date);
-                return dayDate.isBefore(startDate, 'day') || dayDate.isAfter(endDate, 'day');
-            });
-
-            if (invalidDateRangeDays.length > 0) {
-                return createResponse({
-                    res,
-                    statusCode: httpStatus.BAD_REQUEST,
-                    status: false,
-                    message: 'Some schedule days are outside the start and end date range',
-                    error: 'All schedule days must be between startDate and endDate',
-                });
-            }
-        }
-
-        // Create the schedule with the data from frontend
-        // The frontend has already generated the scheduleDays with the correct logic
+        // Frontend provides complete scheduleDays with sophisticated IC/EC allocation
+        // Backend just normalizes dates and saves
         const schedule = await Schedule.create(data);
 
         return createResponse({
@@ -255,7 +220,6 @@ const createSchedule = async (req, res) => {
         });
     }
 };
-
 const getSchedule = async (req, res) => {
     try {
         const id = getIdFromParams(req);

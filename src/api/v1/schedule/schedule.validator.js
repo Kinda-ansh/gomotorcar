@@ -29,23 +29,6 @@ export const createScheduleSchema = yup.object({
         .matches(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format'),
 
     // workingDays and scheduleDays are auto-generated, so make them optional
-    workingDays: yup
-        .number()
-        .typeError('Working days must be a number')
-        .optional()
-        .default(0),
-
-    scheduleDays: yup
-        .array()
-        .of(scheduleDaySchema)
-        .optional()
-        .default([]),
-
-    cityHoliday: objectId,
-    car: objectId.required('Car is required'),
-    package: objectId,
-    customer: objectId,
-
     createdBy: objectId.required('CreatedBy is required'),
     updatedBy: objectId.required('UpdatedBy is required'),
 
@@ -62,7 +45,7 @@ export const updateScheduleSchema = yup.object({
         .date()
         .optional()
         .typeError('End date must be a valid date')
-        .test('end-after-start', 'End date must be after or equal to start date', function(value) {
+        .test('end-after-start', 'End date must be after or equal to start date', function (value) {
             const { startDate } = this.parent;
             if (value && startDate) return new Date(value) >= new Date(startDate);
             return true;
