@@ -169,6 +169,16 @@ const packageSchema = new Schema(
             required: [true, 'Number of days is required'],
             min: [1, 'Number of days must be at least 1']
         },
+        internalCleaning: {
+            type: Number,
+            required: [true, 'Internal cleaning is required'],
+            min: [0, 'Internal cleaning cannot be negative']
+        },
+        externalCleaning: {
+            type: Number,
+            required: [true, 'External cleaning is required'],
+            min: [0, 'External cleaning cannot be negative']
+        },
         usageStatus: {
             type: String,
             enum: ['available', 'unavailable',],

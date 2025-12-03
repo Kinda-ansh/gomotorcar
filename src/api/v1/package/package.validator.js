@@ -129,6 +129,14 @@ export const createPackageSchema = yup.object({
         .integer('Number of days must be an integer')
         .min(1, 'Number of days must be at least 1')
         .required('Number of days is required'),
+    internalCleaning: yup
+        .number()
+        .min(0, 'Internal cleaning cannot be negative')
+        .required('Internal cleaning is required'),
+    externalCleaning: yup
+        .number()
+        .min(0, 'External cleaning cannot be negative')
+        .required('External cleaning is required'),
     usageStatus: yup
         .string()
         .oneOf(['available', 'unavailable', 'limited'], 'Invalid usage status')
@@ -190,6 +198,14 @@ export const updatePackageSchema = yup.object({
         .number()
         .integer('Number of days must be an integer')
         .min(1, 'Number of days must be at least 1')
+        .optional(),
+    internalCleaning: yup
+        .number()
+        .min(0, 'Internal cleaning cannot be negative')
+        .optional(),
+    externalCleaning: yup
+        .number()
+        .min(0, 'External cleaning cannot be negative')
         .optional(),
     usageStatus: yup
         .string()
