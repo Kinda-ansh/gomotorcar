@@ -25,6 +25,7 @@ const userSchema = new Schema(
     //mobile
     googleId: { type: String, default: '' },
     isMpinSet: { type: Boolean, default: false },
+    mobileVerified: { type: Boolean, default: false },
     //web user
     emailVerified: { type: Boolean, default: false },
     verificationToken: { type: String, trim: true },

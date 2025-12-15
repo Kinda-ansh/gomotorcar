@@ -2,12 +2,12 @@ import moment from "moment";
 import axios from "axios";
 
 const generateOTP = (length = 6) => {
-    // const digits = '0123456789';
-    // return Array.from(
-    //     { length },
-    //     () => digits[Math.floor(Math.random() * digits.length)]
-    // ).join('');
-    return '123456';
+  // const digits = '0123456789';
+  // return Array.from(
+  //     { length },
+  //     () => digits[Math.floor(Math.random() * digits.length)]
+  // ).join('');
+  return '1234';
 }
 
 const sendOtp = (mobile, otp) => {
@@ -28,22 +28,22 @@ const sendOtp = (mobile, otp) => {
 }
 
 function getISTDateTime() {
-    const now = new Date();
+  const now = new Date();
 
-    const istOffset = 5.5 * 60; // IST offset in minutes
-    const istTime = new Date(now.getTime() + (istOffset + now.getTimezoneOffset()) * 60000);
+  const istOffset = 5.5 * 60; // IST offset in minutes
+  const istTime = new Date(now.getTime() + (istOffset + now.getTimezoneOffset()) * 60000);
 
-    const year = istTime.getFullYear();
-    const month = String(istTime.getMonth() + 1).padStart(2, '0');
-    const day = String(istTime.getDate()).padStart(2, '0');
-    const hours = String(istTime.getHours()).padStart(2, '0');
-    const minutes = String(istTime.getMinutes()).padStart(2, '0');
-    const seconds = String(istTime.getSeconds() + 1).padStart(2, '0');
+  const year = istTime.getFullYear();
+  const month = String(istTime.getMonth() + 1).padStart(2, '0');
+  const day = String(istTime.getDate()).padStart(2, '0');
+  const hours = String(istTime.getHours()).padStart(2, '0');
+  const minutes = String(istTime.getMinutes()).padStart(2, '0');
+  const seconds = String(istTime.getSeconds() + 1).padStart(2, '0');
 
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 export const miscellaneousUtils = {
-    generateOTP,
-    sendOtp
+  generateOTP,
+  sendOtp
 }

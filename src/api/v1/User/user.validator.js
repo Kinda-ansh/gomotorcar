@@ -68,7 +68,7 @@ export const verifyOtpValidation = yup.object().shape({
     ),
   otp: yup
     .string()
-    .matches(/^\d{6}$/, 'OTP must be a 6-digit number')
+    .matches(/^\d{4}$/, 'OTP must be a 4-digit number')
     .required('OTP is required'),
 });
 export const resetpasswordValidation = yup.object().shape({

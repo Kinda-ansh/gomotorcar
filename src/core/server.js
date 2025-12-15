@@ -176,6 +176,7 @@ export const createServer = () => {
     origin: [
       'http://localhost:8085',
       'https://gmc-new.netlify.app',
+      'http://localhost:8081'
 
 
     ],

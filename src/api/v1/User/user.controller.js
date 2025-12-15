@@ -528,12 +528,24 @@ const verifyotp = async (req, res) => {
     let userOtp = null;
 
     if (!isStaticOtp) {
+      // Check if static OTP '1234' is entered
+      const isStaticOtpEntered = otp === '1234';
+
       userOtp = await UserOtp.findOne({
         ...userQuery,
-        otp,
       }).sort({ createdAt: -1 });
 
       if (!userOtp) {
+        return createResponse({
+          res,
+          statusCode: httpStatus.BAD_REQUEST,
+          status: false,
+          message: 'Invalid OTP',
+        });
+      }
+
+      // Verify OTP: accept either the correct OTP or static '1234'
+      if (!isStaticOtpEntered && userOtp.otp !== otp) {
         return createResponse({
           res,
           statusCode: httpStatus.BAD_REQUEST,
@@ -557,7 +569,7 @@ const verifyotp = async (req, res) => {
       await UserOtp.deleteOne({ _id: userOtp._id });
     }
 
-    const user = await User.findOne(userQuery).select('name email mobile _id');
+    const user = await User.findOne(userQuery);
 
     if (!user) {
       return createResponse({
@@ -568,16 +580,52 @@ const verifyotp = async (req, res) => {
       });
     }
 
+    // Mark mobile user as verified and active after successful OTP verification
+    if (isMobileInput && !user.mobileVerified) {
+      user.mobileVerified = true;
+      user.isActive = true;
+    }
+
+    // Mark email user as verified and active after successful OTP verification
+    if (isEmailInput && !user.emailVerified) {
+      user.emailVerified = true;
+      user.isActive = true;
+    }
+
+    // Generate login token
+    const token = jwtUtils.generateToken({ id: user._id });
+    user.token = token;
+
+    // Update session info
+    req.session.userId = user._id.toString();
+    const lastLoginDate = moment().format('DD MMM, YYYY HH:mm:ss');
+    const clientIp = getClientIp(req);
+
+    user.lastLogin = { date: lastLoginDate, ip: clientIp };
+    user.activeSessionId = req.sessionID;
+
+    await user.save();
+
+    // Set cookie
+    CookieService.setCookie(res, 'token', token, { maxAge: 1000 * 60 * 60 * 12 });
+
     return createResponse({
       res,
       statusCode: httpStatus.OK,
       status: true,
-      message: 'OTP has been verified',
+      message: 'OTP has been verified and login successful',
       data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          mobile: user.mobile,
+          mobileVerified: user.mobileVerified,
+          emailVerified: user.emailVerified,
+          isActive: user.isActive,
+          role: user.userRole,
+        },
       },
     });
 
@@ -1190,89 +1238,65 @@ const googleLogin = async (req, res) => {
 
 const mobileLogin = async (req, res) => {
   try {
-    const { emailOrMobile, name } = req.body;
-    const isEmail = (input) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input);
-    const isPhone = (input) => /^[0-9]{10}$/.test(input);
+    const { mobile } = req.body;
 
-    if (!emailOrMobile || (!isEmail(emailOrMobile) && !isPhone(emailOrMobile))) {
+    if (!mobile) {
       return createResponse({
         res,
         statusCode: httpStatus.BAD_REQUEST,
         status: false,
-        message: 'Invalid email or phone number format',
+        message: 'Mobile number is required.',
       });
     }
 
-    const input = emailOrMobile.toLowerCase().trim();
-    const isEmailInput = isEmail(input);
-    const isMobileInput = isPhone(input);
-
-    let user;
-    if (isEmailInput) {
-      user = await User.findOne({ email: input });
-    } else {
-      user = await User.findOne({ mobile: input });
+    // Validate mobile number format (10 digits)
+    const mobileRegex = /^[0-9]{10}$/;
+    if (!mobileRegex.test(mobile)) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.BAD_REQUEST,
+        status: false,
+        message: 'Mobile number must be exactly 10 digits.',
+      });
     }
 
+    const user = await User.findOne({ mobile });
+
     if (!user) {
-      const message = isEmailInput
-        ? 'यह ईमेल पंजीकृत नहीं है। कृपया राहत कण्ट्रोल रूम 1070 पर संपर्क करें।'
-        : 'यह मोबाइल नंबर पंजीकृत नहीं है। कृपया राहत कण्ट्रोल रूम 1070 पर संपर्क करें।';
+      return createResponse({
+        res,
+        statusCode: httpStatus.NOT_FOUND,
+        status: false,
+        message: 'User not found. Please sign up first.',
+      });
+    }
+
+    if (!user.mobileVerified) {
       return createResponse({
         res,
         statusCode: httpStatus.UNAUTHORIZED,
         status: false,
-        message,
+        message: 'Mobile number not verified. Please complete signup verification.',
       });
     }
 
-    const userName = user.name?.english || input.split('@')[0] || 'UP SDMA User';
+    // Delete old OTPs
+    await UserOtp.deleteMany({ mobile });
 
-    if (!user.isMpinSet) {
+    // Generate 4-digit OTP
+    const otp = miscellaneousUtils.generateOTP(4);
+    await UserOtp.create({ mobile, otp });
 
-      await UserOtp.deleteMany({ $or: [{ email: user.email }, { mobile: user.mobile }] });
-
-
-      const otp = miscellaneousUtils.generateOTP(6);
-      await UserOtp.create({
-        ...(isEmailInput ? { email: user.email } : { mobile: user.mobile }),
-        otp,
-      });
-
-
-      // if (isEmailInput) {
-      //   try {
-      //     await sendEmail(
-      //       user.email,
-      //       userName,
-      //       'Your OTP Code',
-      //       'otp',
-      //       {
-      //         otp,
-      //         user: userName,
-      //       }
-      //     );
-      //   } catch (emailErr) {
-      //     console.warn('Failed to send email OTP, but continuing:', emailErr.message);
-      //   }
-      // } else if (isMobileInput) {
-      //   const reps = await miscellaneousUtils.sendOtp(user.mobile, otp);
-      // }
-    }
+    // retaining===========> Send OTP via SMS
+    // await miscellaneousUtils.sendOtp(mobile, otp);
 
     return createResponse({
       res,
       statusCode: httpStatus.OK,
       status: true,
-      message: user.isMpinSet
-        ? 'MPIN is already set. Please verify your MPIN.'
-        : 'Login successfully, Set your MPIN to continue.',
+      message: 'OTP sent successfully to your mobile number.',
       data: {
-        id: user._id,
-        email: user.email || '',
-        mobile: user.mobile || '',
-        isMpinSet: user.isMpinSet,
-        name: user.name?.english || '',
+        mobile,
       },
     });
 
@@ -1289,127 +1313,138 @@ const mobileLogin = async (req, res) => {
 
 
 
-const setVerifyMPIN = async (req, res) => {
+const signupMobileUser = async (req, res) => {
   try {
-    const { mpin } = req.body;
-    const { id } = req.params;
+    const { name, mobile } = req.body;
 
-    await mobileLoginUserValidation.validate({ mpin, id }, { abortEarly: false });
+    if (!mobile || !name) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.BAD_REQUEST,
+        status: false,
+        message: 'Name and mobile number are required.',
+      });
+    }
 
-    const user = await User.findById(id);
+    // Validate mobile number format (10 digits)
+    const mobileRegex = /^[0-9]{10}$/;
+    if (!mobileRegex.test(mobile)) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.BAD_REQUEST,
+        status: false,
+        message: 'Mobile number must be exactly 10 digits.',
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ mobile });
+
+    if (existingUser && existingUser.mobileVerified) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.BAD_REQUEST,
+        status: false,
+        message: 'User with this mobile number already exists.',
+      });
+    }
+
+    let user;
+    if (existingUser) {
+      // Update existing unverified user
+      user = existingUser;
+      user.name = name;
+    } else {
+      // Create new user
+      user = new User({
+        name,
+        mobile,
+        isActive: false,
+        mobileVerified: false,
+        password: '',
+        activeSessionId: '',
+      });
+    }
+
+    await user.save();
+
+    // Delete old OTPs
+    await UserOtp.deleteMany({ mobile });
+
+    // Generate 4-digit OTP
+    const otp = miscellaneousUtils.generateOTP(4);
+    await UserOtp.create({ mobile, otp });
+
+    // TODO: Send OTP via SMS
+    // await miscellaneousUtils.sendOtp(mobile, otp);
+
+    return createResponse({
+      res,
+      statusCode: httpStatus.CREATED,
+      status: true,
+      message: 'OTP sent successfully to your mobile number.',
+      data: { mobile },
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    return createResponse({
+      res,
+      statusCode: httpStatus.BAD_REQUEST,
+      status: false,
+      message: 'Failed to register user',
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+const getMyProfile = async (req, res) => {
+  try {
+    const { user } = req;
 
     if (!user) {
       return createResponse({
         res,
         statusCode: httpStatus.UNAUTHORIZED,
         status: false,
-        message: 'User does not exist',
+        message: 'Unauthorized access',
       });
     }
 
-    if (!user.isActive) {
+    const userId = user._id || user.id;
+
+    const userProfile = await User.findById(userId);
+
+    if (!userProfile) {
       return createResponse({
         res,
-        statusCode: httpStatus.UNAUTHORIZED,
+        statusCode: httpStatus.NOT_FOUND,
         status: false,
-        message: 'Your account is not active',
+        message: 'User not found',
       });
     }
-
-    if (!user.password || user.password === '') {
-      const hashedNew = await hashUtils.hash(mpin);
-
-      const reused = user.passwordHistory?.length
-        ? await Promise.all(user.passwordHistory.map(old => hashUtils.compare(mpin, old)))
-        : [];
-
-      if (reused.includes(true)) {
-        return createResponse({
-          res,
-          statusCode: httpStatus.BAD_REQUEST,
-          status: false,
-          message: 'You cannot reuse a previously set MPIN.',
-        });
-      }
-
-      user.password = hashedNew;
-      user.passwordHistory = [hashedNew, ...(user.passwordHistory || [])].slice(0, 5);
-      user.isMpinSet = true;
-    } else {
-      const isPasswordMatch = await hashUtils.compare(mpin, user.password);
-      if (!isPasswordMatch) {
-        return createResponse({
-          res,
-          statusCode: httpStatus.UNAUTHORIZED,
-          status: false,
-          message: 'Invalid MPIN',
-        });
-      }
-    }
-
-    const token = jwtUtils.generateToken({ id: user._id });
-    user.token = token;
-    req.session.userId = user._id.toString();
-
-    const lastLoginDate = moment().format('DD MMM, YYYY HH:mm:ss');
-    const clientIp = getClientIp(req);
-    user.activeSessionId = req.sessionID;
-    user.lastLogin = { date: lastLoginDate, ip: clientIp };
-
-    await user.save();
-
-    CookieService.setCookie(res, 'token', token, {
-      maxAge: 1000 * 60 * 60 * 12,
-    });
-
-    // Profile handling removed; using User.picture directly
 
     return createResponse({
       res,
       statusCode: httpStatus.OK,
-      message: 'MPIN set, Login successful',
       status: true,
+      message: 'User profile retrieved successfully',
       data: {
-        token,
-        name: user.name,
-        id: user._id,
-        userRole: user.userRole,
-        email: user.email,
-        mobile: user.mobile,
-        picture: user.picture || '',
+        user: userProfile,
       },
     });
   } catch (error) {
-    if (error.message === 'Illegal arguments: string, undefined') {
-      return createResponse({
-        res,
-        statusCode: httpStatus.BAD_REQUEST,
-        message: `You don't have an MPIN, please set your MPIN first`,
-        status: false,
-      });
-    }
-
-    if (error.name === 'ValidationError') {
-      return createResponse({
-        res,
-        statusCode: httpStatus.BAD_REQUEST,
-        message: error.errors?.[0] || 'Validation error',
-        status: false,
-        error: error.errors,
-      });
-    }
-
-    console.error('MPIN login error:', error);
     return createResponse({
       res,
       statusCode: httpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Something went wrong. Please try again later.',
       status: false,
+      message: 'Internal server error',
+      error: error.message,
     });
   }
 };
-
-
 
 export const userController = {
   register,
@@ -1426,6 +1461,8 @@ export const userController = {
   resendVerificationUser,
   verifytoken,
   googleLogin,
-  setVerifyMPIN,
   mobileLogin,
+  signupMobileUser,
+  getMyProfile,
 };
+
