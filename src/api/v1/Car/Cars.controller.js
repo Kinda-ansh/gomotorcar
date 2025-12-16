@@ -37,7 +37,7 @@ const getCars = async (req, res) => {
                 .populate('brand', 'name code')
                 .populate({
                     path: 'carModel',
-                    select: 'name code brand carCategory',
+                    select: 'name code brand carCategory image',
                     populate: [
                         { path: 'brand', select: 'name code' },
                         { path: 'carCategory', select: 'name code' }
@@ -61,6 +61,63 @@ const getCars = async (req, res) => {
             res,
             statusCode: httpStatus.INTERNAL_SERVER_ERROR,
             message: 'Failed to fetch cars',
+            status: false,
+            error: error.message,
+        });
+    }
+};
+
+const getMycars = async (req, res) => {
+    try {
+        const { limit = 1000, skip = 0, search, isActive } = extractCommonQueryParams(req);
+        let query = { deletedAt: null, createdBy: req.user._id };
+
+        if (req.query.showActiveOnly == 'true') {
+            query.isActive = true;
+        }
+
+        if (search) {
+            query.$or = getCommonSearchConditionForMasters(search, ['name', 'registrationNumber']);
+        }
+
+        if (isActive === 'true' || isActive === true) {
+            query.isActive = true;
+        } else if (isActive === 'false' || isActive === false) {
+            query.isActive = false;
+        }
+
+        const [list, totalCount] = await Promise.all([
+            Cars.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .populate('brand', 'name code')
+                .populate({
+                    path: 'carModel',
+                    select: 'name code brand carCategory image',
+                    populate: [
+                        { path: 'brand', select: 'name code' },
+                        { path: 'carCategory', select: 'name code' }
+                    ]
+                })
+                .populate('carRegistrationType', 'name code')
+                .populate('carTransmissionType', 'name code')
+                .populate('fuelType', 'name code'),
+            Cars.countDocuments(query),
+        ]);
+
+        return createResponse({
+            res,
+            statusCode: httpStatus.OK,
+            status: true,
+            message: 'My cars retrieved successfully',
+            data: { list, count: totalCount },
+        });
+    } catch (error) {
+        return createResponse({
+            res,
+            statusCode: httpStatus.INTERNAL_SERVER_ERROR,
+            message: 'Failed to fetch my cars',
             status: false,
             error: error.message,
         });
@@ -103,7 +160,7 @@ const getCar = async (req, res) => {
             .populate('brand', 'name code')
             .populate({
                 path: 'carModel',
-                select: 'name code brand carCategory',
+                select: 'name code brand carCategory image',
                 populate: [
                     { path: 'brand', select: 'name code' },
                     { path: 'carCategory', select: 'name code' }
@@ -157,7 +214,7 @@ const updateCar = async (req, res) => {
             .populate('brand', 'name code')
             .populate({
                 path: 'carModel',
-                select: 'name code brand carCategory',
+                select: 'name code brand carCategory image',
                 populate: [
                     { path: 'brand', select: 'name code' },
                     { path: 'carCategory', select: 'name code' }
@@ -365,6 +422,7 @@ const getCarsDashboard = async (req, res) => {
 };
 export const CarsController = {
     getCars,
+    getMycars,
     createCar,
     getCar,
     updateCar,
