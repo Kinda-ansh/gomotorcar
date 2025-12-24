@@ -524,59 +524,6 @@ const getPackagesByApprovalStatus = async (req, res) => {
     }
 };
 
-/**
- * Get all category pricing entries as a flattened list
- * Each entry contains the main package data with individual category pricing details
- * 
- * @route GET /api/v1/packages/category-pricing/all
- * @description Returns a flattened list where each entry represents a single category pricing
- *              with complete package information. Useful for displaying category-package combinations
- *              in tables or lists where each row represents one category from a package.
- * 
- * @query {number} limit - Number of entries to return (default: 1000)
- * @query {number} skip - Number of entries to skip for pagination (default: 0)
- * @query {string} search - Search term for package name, internal name, or description
- * @query {boolean} isActive - Filter by active status
- * @query {boolean} showActiveOnly - Show only active packages
- * @query {string} approval_status - Filter by approval status (pending, approved, rejected)
- * @query {string} packageStatus - Filter by package status (active, inactive)
- * @query {string} usageStatus - Filter by usage status (available, unavailable, limited)
- * @query {string} cluster - Filter by cluster ID
- * @query {string} carCategory - Filter by car category ID
- * 
- * @returns {Object} Response containing:
- *   - list: Array of flattened category pricing entries
- *   - count: Total number of entries
- *   - statusCounts: Counts by approval status
- *   - summary: Additional statistics
- * 
- * @example Response structure:
- * {
- *   "list": [
- *     {
- *       "categoryPackageId": "PKG0001-CC0001",
- *       "carCategory": { "_id": "...", "code": "CC0001", "name": "Sedan" },
- *       "strikeOffPrice": 1000,
- *       "actualPrice": 800,
- *       "taxAmount": 144,
- *       "totalAmount": 944,
- *       "packageId": "...",
- *       "packageCode": "PKG0001",
- *       "packageName": "Basic Wash",
- *       "categoryName": "Sedan",
- *       "categoryCode": "CC0001",
- *       // ... all other package fields
- *     }
- *   ],
- *   "count": 150,
- *   "statusCounts": { "approved": 100, "pending": 30, "rejected": 20 },
- *   "summary": {
- *     "totalPackages": 50,
- *     "totalCategoryPricingEntries": 150,
- *     "averageCategoriesPerPackage": "3.00"
- *   }
- * }
- */
 const getAllCategoryPricing = async (req, res) => {
     try {
         const { limit = 1000, skip = 0, search, isActive } = extractCommonQueryParams(req);
@@ -663,6 +610,8 @@ const getAllCategoryPricing = async (req, res) => {
                         cluster: pkg.cluster,
                         packageStatus: pkg.packageStatus,
                         noOfDays: pkg.noOfDays,
+                        internalCleaning: pkg.internalCleaning,
+                        externalCleaning: pkg.externalCleaning,
                         usageStatus: pkg.usageStatus,
                         taxDetails: pkg.taxDetails,
                         description: pkg.description,
@@ -740,6 +689,145 @@ const getAllCategoryPricing = async (req, res) => {
     }
 };
 
+const getPackagesByCategoryID = async (req, res) => {
+    try {
+        const { categoryId } = req.params;
+        const { limit = 1000, skip = 0, search, isActive } = extractCommonQueryParams(req);
+
+        // Base query
+        let query = {
+            deletedAt: null,
+            'categoryPricing.carCategory': categoryId
+        };
+
+        // Filter by active status if provided
+        if (isActive === 'true' || isActive === true) {
+            query.isActive = true;
+        } else if (isActive === 'false' || isActive === false) {
+            query.isActive = false;
+        }
+
+        // Search functionality
+        if (search) {
+            query.$or = [
+                ...getCommonSearchConditionForMasters(search, ['name', 'internalName', 'description']),
+            ];
+        }
+
+        // Get packages with populated data
+        const packages = await Package.find(query)
+            .populate('cluster', 'code name address')
+            .populate('categoryPricing.carCategory', 'code name')
+            .populate('createdBy', 'name email')
+            .populate('updatedBy', 'name email')
+            .sort({ createdAt: -1 });
+
+        // Flatten and filter the category pricing data
+        const categoryPricingList = [];
+
+        packages.forEach(pkg => {
+            if (pkg.categoryPricing && pkg.categoryPricing.length > 0) {
+                pkg.categoryPricing.forEach((categoryPricing, index) => {
+                    // Only include the pricing for the requested category
+                    // Handle both populated object and ID string cases
+                    const currentCategoryId = categoryPricing.carCategory._id
+                        ? categoryPricing.carCategory._id.toString()
+                        : categoryPricing.carCategory.toString();
+
+                    if (currentCategoryId === categoryId) {
+                        const flattenedEntry = {
+                            // Category-specific data
+                            categoryPackageId: categoryPricing.categoryPackageId,
+                            carCategory: categoryPricing.carCategory,
+                            strikeOffPrice: categoryPricing.strikeOffPrice,
+                            actualPrice: categoryPricing.actualPrice,
+                            taxAmount: categoryPricing.taxAmount,
+                            totalAmount: categoryPricing.totalAmount,
+                            cleanerPaymentRate: categoryPricing.cleanerPaymentRate,
+                            customerRefundRate: categoryPricing.customerRefundRate,
+                            categoryIndex: index,
+
+                            // Package data
+                            packageId: pkg._id,
+                            packageCode: pkg.code,
+                            packageName: pkg.name,
+                            internalName: pkg.internalName,
+                            cluster: pkg.cluster,
+                            packageStatus: pkg.packageStatus,
+                            noOfDays: pkg.noOfDays,
+                            internalCleaning: pkg.internalCleaning,
+                            externalCleaning: pkg.externalCleaning,
+                            usageStatus: pkg.usageStatus,
+                            taxDetails: pkg.taxDetails,
+                            description: pkg.description,
+                            features: pkg.features,
+                            approval_status: pkg.approval_status,
+                            isActive: pkg.isActive,
+                            createdAt: pkg.createdAt,
+                            updatedAt: pkg.updatedAt,
+                            createdBy: pkg.createdBy,
+                            updatedBy: pkg.updatedBy,
+
+                            // Additional computed fields
+                            totalCategories: pkg.categoryPricing.length,
+                            categoryName: typeof categoryPricing.carCategory === 'object'
+                                ? categoryPricing.carCategory.name
+                                : 'Unknown',
+                            categoryCode: typeof categoryPricing.carCategory === 'object'
+                                ? categoryPricing.carCategory.code
+                                : null,
+                        };
+
+                        categoryPricingList.push(flattenedEntry);
+                    }
+                });
+            }
+        });
+
+        // Apply pagination to the flattened list
+        const paginatedList = categoryPricingList.slice(skip, skip + limit);
+        const totalCount = categoryPricingList.length;
+
+        // Get counts
+        const approvedCount = categoryPricingList.filter(entry =>
+            entry.approval_status?.status === 'approved'
+        ).length;
+
+        const pendingCount = categoryPricingList.filter(entry =>
+            entry.approval_status?.status === 'pending'
+        ).length;
+
+        const rejectedCount = categoryPricingList.filter(entry =>
+            entry.approval_status?.status === 'rejected'
+        ).length;
+
+        return createResponse({
+            res,
+            statusCode: httpStatus.OK,
+            status: true,
+            message: 'Packages by category retrieved successfully',
+            data: {
+                list: paginatedList,
+                count: totalCount,
+                statusCounts: {
+                    approved: approvedCount,
+                    pending: pendingCount,
+                    rejected: rejectedCount,
+                    total: approvedCount + pendingCount + rejectedCount
+                }
+            },
+        });
+    } catch (error) {
+        return createResponse({
+            res,
+            statusCode: httpStatus.INTERNAL_SERVER_ERROR,
+            message: 'Failed to fetch packages by category',
+            status: false,
+            error: error.message,
+        });
+    }
+};
+
 export const PackageController = {
     getPackages,
     createPackage,
@@ -752,5 +840,6 @@ export const PackageController = {
     rejectPackage,
     getPackagesByApprovalStatus,
     getAllCategoryPricing,
+    getPackagesByCategoryID,
 };
 

@@ -91,7 +91,7 @@ const getMycars = async (req, res) => {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate('brand', 'name code')
+                .populate('brand', 'name image code')
                 .populate({
                     path: 'carModel',
                     select: 'name code brand carCategory image',

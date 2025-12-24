@@ -23,6 +23,7 @@ router.get('/car-category/:carCategoryId', auth, PackageController.getPackagesBy
 
 // Category pricing routes
 router.get('/category-pricing/all', auth, PackageController.getAllCategoryPricing);
+router.get('/category-pricing/:categoryId', auth, PackageController.getPackagesByCategoryID);
 
 export default router;
 
