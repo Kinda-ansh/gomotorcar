@@ -358,10 +358,11 @@ packageSchema.pre('findOneAndUpdate', async function (next) {
             }
         }
 
-        // Handle tax details updates - need to recalculate all category pricing
-        if (setData['taxDetails.taxApplicable'] !== undefined ||
+        // Handle tax details updates - need to recalculate all category pricing ONLY if categoryPricing is not provided
+        if (!setData.categoryPricing && (
+            setData['taxDetails.taxApplicable'] !== undefined ||
             setData['taxDetails.taxRate'] !== undefined ||
-            (setData.taxDetails && (setData.taxDetails.taxApplicable !== undefined || setData.taxDetails.taxRate !== undefined))) {
+            (setData.taxDetails && (setData.taxDetails.taxApplicable !== undefined || setData.taxDetails.taxRate !== undefined)))) {
 
             // Fetch the current document to update all categories
             const docToUpdate = await this.model.findOne(this.getQuery());
