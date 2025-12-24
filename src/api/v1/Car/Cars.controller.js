@@ -10,6 +10,92 @@ import FuelType from './../FuelType/fuelType.model';
 import Brand from './../brand/brand.model';
 import CarModel from './../CarModel/carModel.model';
 import CarCategory from './../CarCategory/carCategory.model';
+import Schedule from '../schedule/schedule.model';
+import dayjs from '../../../utils/dayjs';
+
+/**
+ * Helper to enrich cars with package details
+ */
+const enrichCarsWithPackageDetails = async (cars) => {
+    if (!cars || cars.length === 0) return [];
+
+    const carIds = cars.map(car => car._id);
+    const today = dayjs().startOf('day');
+
+    // Fetch all schedules for these cars
+    const schedules = await Schedule.find({
+        car: { $in: carIds },
+        deletedAt: null
+    }).sort({ endDate: -1 });
+
+    // Group schedules by car
+    const scheduleMap = {};
+    schedules.forEach(schedule => {
+        const carId = schedule.car.toString();
+        if (!scheduleMap[carId]) {
+            scheduleMap[carId] = [];
+        }
+        scheduleMap[carId].push(schedule);
+    });
+
+    // Enrich each car
+    return cars.map(car => {
+        const carSchedules = scheduleMap[car._id.toString()] || [];
+        let packageDetails = {
+            _id: null,
+            status: 'No subscription',
+            startDate: null,
+            endDate: null
+        };
+
+        if (carSchedules.length > 0) {
+            // Find active schedule
+            const activeSchedule = carSchedules.find(s => {
+                const start = dayjs(s.startDate).startOf('day');
+                const end = dayjs(s.endDate).endOf('day');
+                return (today.isAfter(start) || today.isSame(start)) &&
+                    (today.isBefore(end) || today.isSame(end));
+            });
+
+            if (activeSchedule) {
+                packageDetails = {
+                    _id: activeSchedule.package,
+                    status: 'Active',
+                    startDate: activeSchedule.startDate,
+                    endDate: activeSchedule.endDate
+                };
+            } else {
+                // If no active schedule, check the latest one
+                const latestSchedule = carSchedules[0]; // Already sorted by endDate desc
+                const end = dayjs(latestSchedule.endDate).endOf('day');
+
+                if (today.isAfter(end)) {
+                    packageDetails = {
+                        _id: latestSchedule.package,
+                        status: 'Expired',
+                        startDate: latestSchedule.startDate,
+                        endDate: latestSchedule.endDate
+                    };
+                }
+                // If latest is in future (not started yet), we could show 'Upcoming' or 'No subscription'
+                // For now, sticking to Active/Expired/No subscription logic requested
+                else if (dayjs(latestSchedule.startDate).isAfter(today)) {
+                    packageDetails = {
+                        _id: latestSchedule.package,
+                        status: 'Upcoming', // Adding Upcoming as it's a logical state even if not explicitly requested, better than No Subscription
+                        startDate: latestSchedule.startDate,
+                        endDate: latestSchedule.endDate
+                    };
+                }
+            }
+        }
+
+        return {
+            ...car.toObject ? car.toObject() : car,
+            packageDetails
+        };
+    });
+};
 
 const getCars = async (req, res) => {
     try {
@@ -29,7 +115,7 @@ const getCars = async (req, res) => {
             query.isActive = false;
         }
 
-        const [list, totalCount] = await Promise.all([
+        const [rawList, totalCount] = await Promise.all([
             Cars.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -48,6 +134,8 @@ const getCars = async (req, res) => {
                 .populate('fuelType', 'name code'),
             Cars.countDocuments(query),
         ]);
+
+        const list = await enrichCarsWithPackageDetails(rawList);
 
         return createResponse({
             res,
@@ -86,7 +174,7 @@ const getMycars = async (req, res) => {
             query.isActive = false;
         }
 
-        const [list, totalCount] = await Promise.all([
+        const [rawList, totalCount] = await Promise.all([
             Cars.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -105,6 +193,8 @@ const getMycars = async (req, res) => {
                 .populate('fuelType', 'name code'),
             Cars.countDocuments(query),
         ]);
+
+        const list = await enrichCarsWithPackageDetails(rawList);
 
         return createResponse({
             res,
