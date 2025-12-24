@@ -697,7 +697,8 @@ const getPackagesByCategoryID = async (req, res) => {
         // Base query
         let query = {
             deletedAt: null,
-            'categoryPricing.carCategory': categoryId
+            'categoryPricing.carCategory': categoryId,
+            'approval_status.status': 'approved'
         };
 
         // Filter by active status if provided
