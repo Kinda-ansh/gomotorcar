@@ -59,7 +59,7 @@ const enrichCarsWithPackageDetails = async (cars) => {
 
             if (activeSchedule) {
                 packageDetails = {
-                    _id: activeSchedule.package,
+                    _id: activeSchedule._id,
                     status: 'Active',
                     startDate: activeSchedule.startDate,
                     endDate: activeSchedule.endDate
@@ -71,7 +71,7 @@ const enrichCarsWithPackageDetails = async (cars) => {
 
                 if (today.isAfter(end)) {
                     packageDetails = {
-                        _id: latestSchedule.package,
+                        _id: latestSchedule._id,
                         status: 'Expired',
                         startDate: latestSchedule.startDate,
                         endDate: latestSchedule.endDate
@@ -81,7 +81,7 @@ const enrichCarsWithPackageDetails = async (cars) => {
                 // For now, sticking to Active/Expired/No subscription logic requested
                 else if (dayjs(latestSchedule.startDate).isAfter(today)) {
                     packageDetails = {
-                        _id: latestSchedule.package,
+                        _id: latestSchedule._id,
                         status: 'Upcoming', // Adding Upcoming as it's a logical state even if not explicitly requested, better than No Subscription
                         startDate: latestSchedule.startDate,
                         endDate: latestSchedule.endDate
