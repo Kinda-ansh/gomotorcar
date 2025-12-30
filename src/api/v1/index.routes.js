@@ -21,7 +21,7 @@ import qrcodeSeriesRoutes from './qrcode-series/qrcode-series.route';
 import packageRoutes from './package/package.route';
 import scheduleRoutes from './schedule/schedule.route';
 import cityHolidaysRoutes from './cityHolidays/cityHolidays.route';
-
+import appSettingsRoutes from './appSettings/appSettings.route';
 const { FileUploadController } = require('./common/fileupload.controller');
 const { upload, uploadFile, uploadMultipleFiles } = FileUploadController;
 const { SearchController } = require('./common/search.controller');
@@ -46,6 +46,8 @@ router.use('/qrcode-series', qrcodeSeriesRoutes);
 router.use('/packages', packageRoutes);
 router.use('/schedule', scheduleRoutes);
 router.use('/city-holidays', cityHolidaysRoutes);
+router.use('/app-settings', appSettingsRoutes);
+
 
 
 // router.post('/version', VersionController.matchVersion);
