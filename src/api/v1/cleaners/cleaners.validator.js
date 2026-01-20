@@ -8,11 +8,10 @@ const objectId = yup
   );
 
 export const createCleanerValidation = yup.object().shape({
-  user: objectId.required('User ID is required'),
-
-  // Basic Info
+  // Basic Info (will be stored in User model)
   firstName: yup.string().trim().required('First name is required'),
   lastName: yup.string().trim().required('Last name is required'),
+  mobile: yup.string().trim().required('Mobile number is required'),
 
   // Address Info
   address: yup.object().shape({

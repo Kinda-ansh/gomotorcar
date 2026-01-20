@@ -32,9 +32,9 @@ const cleanerSchema = new Schema(
       ref: 'User'
     },
 
-    /* ---------------- Basic Info ---------------- */
-    firstName: { type: String, trim: true },
-    lastName: { type: String, trim: true },
+    /* ---------------- Basic Info (also stored in User.name) ---------------- */
+    firstName: { type: String, trim: true, required: true },
+    lastName: { type: String, trim: true, required: true },
 
     /* ---------------- Address Info ---------------- */
     address: {

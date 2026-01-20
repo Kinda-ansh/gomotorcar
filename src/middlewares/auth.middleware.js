@@ -46,7 +46,7 @@ const auth = async (req, res, next) => {
     }
 
     console.log('Auth Middleware - Token verified successfully, user ID:', decoded.id);
-    let user = await User.findById(decoded.id).populate('userRole');
+    let user = await User.findById(decoded.id).populate('role');
 
     if (!user) {
       console.log('Auth Middleware - User not found in database:', decoded.id);

@@ -20,37 +20,53 @@ const createCleaner = async (req, res) => {
             abortEarly: false,
         });
 
-        // Check if user exists
-        const user = await User.findById(payload.user);
-        if (!user) {
-            return createResponse({
-                res,
-                statusCode: httpStatus.NOT_FOUND,
-                status: false,
-                message: 'User not found',
-            });
-        }
+        // Extract user-related fields
+        const { firstName, lastName, mobile, ...cleanerData } = payload;
 
-        // Check if cleaner already exists for this user
-        const existingCleaner = await Cleaner.findOne({ user: payload.user });
-        if (existingCleaner) {
+        // Check if mobile number already exists
+        const existingUser = await User.findOne({ mobile });
+        if (existingUser) {
             return createResponse({
                 res,
                 statusCode: httpStatus.CONFLICT,
                 status: false,
-                message: 'Cleaner profile already exists for this user',
+                message: 'Mobile number already registered',
             });
         }
 
-        const cleaner = await Cleaner.create(payload);
-
-        return createResponse({
-            res,
-            statusCode: httpStatus.CREATED,
-            status: true,
-            message: 'Cleaner created successfully',
-            data: cleaner,
+        // Step 1: Create User first with combined name and mobile
+        const newUser = await User.create({
+            name: `${firstName} ${lastName}`.trim(),
+            mobile,
+            loginMethod: 'mobile',
+            isActive: true,
+            mobileVerified: false,
         });
+
+        try {
+            // Step 2: Create Cleaner profile with the userId and store firstName/lastName separately
+            const cleaner = await Cleaner.create({
+                user: newUser._id,
+                firstName,
+                lastName,
+                ...cleanerData,
+            });
+
+            // Populate user data in response
+            await cleaner.populate('user', 'name mobile email');
+
+            return createResponse({
+                res,
+                statusCode: httpStatus.CREATED,
+                status: true,
+                message: 'Cleaner created successfully',
+                data: cleaner,
+            });
+        } catch (cleanerError) {
+            // If cleaner creation fails, delete the created user to maintain data consistency
+            await User.findByIdAndDelete(newUser._id);
+            throw cleanerError;
+        }
     } catch (error) {
         if (error.name === 'ValidationError') {
             return createResponse({
@@ -61,6 +77,18 @@ const createCleaner = async (req, res) => {
                 error: error.errors,
             });
         }
+
+        // Handle MongoDB duplicate key error
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyPattern)[0];
+            return createResponse({
+                res,
+                statusCode: httpStatus.CONFLICT,
+                status: false,
+                message: `${field} already exists`,
+            });
+        }
+
         return createResponse({
             res,
             statusCode: httpStatus.INTERNAL_SERVER_ERROR,
@@ -77,34 +105,73 @@ const getCleaners = async (req, res) => {
         const { limit = 1000, skip = 0, search } = extractCommonQueryParams(req);
         let matchQuery = {};
 
+        // Build search pipeline
+        const pipeline = [];
+
+        // If search is provided, first lookup users and filter
         if (search) {
-            matchQuery.$or = [
-                { firstName: { $regex: search, $options: 'i' } },
-                { lastName: { $regex: search, $options: 'i' } },
-                { 'address.city': { $regex: search, $options: 'i' } },
-                { 'address.pinCode': { $regex: search, $options: 'i' } },
-            ];
+            pipeline.push(
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'user',
+                        foreignField: '_id',
+                        as: 'userDataSearch',
+                    },
+                },
+                {
+                    $unwind: {
+                        path: '$userDataSearch',
+                        preserveNullAndEmptyArrays: true,
+                    },
+                },
+                {
+                    $match: {
+                        $or: [
+                            { 'userDataSearch.name': { $regex: search, $options: 'i' } },
+                            { 'userDataSearch.mobile': { $regex: search, $options: 'i' } },
+                            { 'address.city': { $regex: search, $options: 'i' } },
+                            { 'address.pinCode': { $regex: search, $options: 'i' } },
+                        ],
+                    },
+                }
+            );
         }
 
-        const cleanersAgg = await Cleaner.aggregate([
-            { $match: matchQuery },
+        pipeline.push(
             { $sort: { createdAt: -1 } },
             { $skip: skip },
-            { $limit: limit },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'user',
-                    foreignField: '_id',
-                    as: 'userData',
+            { $limit: limit }
+        );
+
+        // Add user lookup if not already done in search
+        if (!search) {
+            pipeline.push(
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'user',
+                        foreignField: '_id',
+                        as: 'userData',
+                    },
                 },
-            },
-            {
-                $unwind: {
-                    path: '$userData',
-                    preserveNullAndEmptyArrays: true,
+                {
+                    $unwind: {
+                        path: '$userData',
+                        preserveNullAndEmptyArrays: true,
+                    },
+                }
+            );
+        } else {
+            // Rename userDataSearch to userData for consistency
+            pipeline.push({
+                $addFields: {
+                    userData: '$userDataSearch',
                 },
-            },
+            });
+        }
+
+        pipeline.push(
             {
                 $lookup: {
                     from: 'users',
@@ -145,16 +212,53 @@ const getCleaners = async (req, res) => {
                     queriedComment: 1,
                     createdAt: 1,
                     updatedAt: 1,
+                    'userData._id': 1,
                     'userData.name': 1,
                     'userData.mobile': 1,
                     'userData.email': 1,
                     'approverData.name': 1,
                     'querierData.name': 1,
                 },
-            },
-        ]);
+            }
+        );
 
-        const totalCount = await Cleaner.countDocuments(matchQuery);
+        const cleanersAgg = await Cleaner.aggregate(pipeline);
+
+        // Count total documents with search filter
+        let totalCount;
+        if (search) {
+            const countPipeline = [
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'user',
+                        foreignField: '_id',
+                        as: 'userDataSearch',
+                    },
+                },
+                {
+                    $unwind: {
+                        path: '$userDataSearch',
+                        preserveNullAndEmptyArrays: true,
+                    },
+                },
+                {
+                    $match: {
+                        $or: [
+                            { 'userDataSearch.name': { $regex: search, $options: 'i' } },
+                            { 'userDataSearch.mobile': { $regex: search, $options: 'i' } },
+                            { 'address.city': { $regex: search, $options: 'i' } },
+                            { 'address.pinCode': { $regex: search, $options: 'i' } },
+                        ],
+                    },
+                },
+                { $count: 'total' },
+            ];
+            const countResult = await Cleaner.aggregate(countPipeline);
+            totalCount = countResult[0]?.total || 0;
+        } else {
+            totalCount = await Cleaner.countDocuments();
+        }
 
         return createResponse({
             res,
