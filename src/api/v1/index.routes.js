@@ -22,11 +22,11 @@ import packageRoutes from './package/package.route';
 import scheduleRoutes from './schedule/schedule.route';
 import cityHolidaysRoutes from './cityHolidays/cityHolidays.route';
 import appSettingsRoutes from './appSettings/appSettings.route';
+import cleanerRoutes from './cleaners/cleaners.route';
 const { FileUploadController } = require('./common/fileupload.controller');
 const { upload, uploadFile, uploadMultipleFiles } = FileUploadController;
 const { SearchController } = require('./common/search.controller');
 const { VersionController } = require('./common/version.controller');
-
 // all v1 routes
 router.use('/auth', userRoutes);
 router.use('/cluster', clusterRoutes);
@@ -47,8 +47,7 @@ router.use('/packages', packageRoutes);
 router.use('/schedule', scheduleRoutes);
 router.use('/city-holidays', cityHolidaysRoutes);
 router.use('/app-settings', appSettingsRoutes);
-
-
+router.use('/cleaners', cleanerRoutes);
 
 // router.post('/version', VersionController.matchVersion);
 router.post('/version-create', VersionController.createVersion);

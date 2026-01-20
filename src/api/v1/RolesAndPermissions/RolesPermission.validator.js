@@ -18,11 +18,12 @@ const nonEmptyString = (label) =>
 
 export const createRoleSchema = yup.object({
   name: yup.string().required('Name is required').trim(),
-  level: yup
+  internalName: yup
     .string()
-    .oneOf(['country', 'village', 'tehsil', 'district', 'state', 'own'])
-    .required('Level is required')
-    .trim(),
+    .required('Internal name is required')
+    .trim()
+    .lowercase()
+    .matches(/^[a-z0-9_-]+$/, 'Internal name must contain only lowercase letters, numbers, hyphens, and underscores'),
   description: yup.string().trim().optional(),
   isDefault: yup.boolean().default(false),
   permissions: yup
@@ -33,27 +34,25 @@ export const createRoleSchema = yup.object({
         actions: yup
           .array()
           .of(yup.string().oneOf(['create', 'view', 'edit', 'delete']))
-          .default([]),
-        level: yup
-          .string()
-          .oneOf(['village', 'tehsil', 'district', 'state', 'own'])
-          .optional(),
+          .default([])
       })
     )
+    .optional()
     .default([]),
   createdBy: objectId,
   updatedBy: objectId
 });
 
 export const updateRoleSchema = yup.object({
-  name: nonEmptyString('Name').optional(),
-  level: yup
+  name: nonEmptyString('Name'),
+  internalName: yup
     .string()
-    .oneOf(['country', 'village', 'tehsil', 'district', 'state', 'own'])
     .optional()
-    .trim(),
+    .trim()
+    .lowercase()
+    .matches(/^[a-z0-9_-]+$/, 'Internal name must contain only lowercase letters, numbers, hyphens, and underscores'),
   description: yup.string().optional().trim(),
-  isDefault: yup.boolean().default(false),
+  isDefault: yup.boolean().optional(),
   permissions: yup
     .array()
     .of(
@@ -62,13 +61,9 @@ export const updateRoleSchema = yup.object({
         actions: yup
           .array()
           .of(yup.string().oneOf(['create', 'view', 'edit', 'delete']))
-          .default([]),
-        level: yup
-          .string()
-          .oneOf(['village', 'tehsil', 'district', 'state', 'own'])
-          .optional(),
+          .default([])
       })
     )
     .optional(),
-  updatedBy: objectId.required('UpdatedBy is required'),
+  updatedBy: objectId.required('UpdatedBy is required')
 });

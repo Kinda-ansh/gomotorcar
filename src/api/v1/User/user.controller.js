@@ -344,7 +344,7 @@ const login = async (req, res) => {
         name: user.name,
         id: user._id,
         email: user.email,
-        role: user.userRole
+        role: user.role
       },
     });
   } catch (error) {
@@ -624,7 +624,7 @@ const verifyotp = async (req, res) => {
           mobileVerified: user.mobileVerified,
           emailVerified: user.emailVerified,
           isActive: user.isActive,
-          role: user.userRole,
+          role: user.role,
         },
       },
     });
@@ -808,7 +808,7 @@ const listUser = async (req, res) => {
       email: 1,
       mobile: 1,
       lastLogin: 1,
-      userRole: 1,
+      role: 1,
       gender: 1,
       picture: 1,
       googleId: 1,

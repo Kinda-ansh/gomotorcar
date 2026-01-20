@@ -13,7 +13,7 @@ const userSchema = new Schema(
     mobile: { type: String, unique: true, trim: true, sparse: true },
     password: { type: String, trim: true },
     lastLogin: { date: String, ip: String },
-    userRole: { type: mongoose.Types.ObjectId, ref: 'Role' },
+    role: { type: mongoose.Types.ObjectId, ref: 'Role' },
     gender: { type: String, trim: true },
     token: { type: String, trim: true },
     isActive: { type: Boolean, default: true },

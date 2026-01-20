@@ -102,7 +102,7 @@ const createRole = async (req, res) => {
       status: false,
       message:
         error.code === 11000
-          ? 'Role with this name or code already exists.'
+          ? 'Role with this name or internal name already exists.'
           : error.message,
       error: error.message,
     });
@@ -187,63 +187,58 @@ const updateRole = async (req, res) => {
   }
 };
 
-const getPermissions = async (req, res) => {
+const deleteRole = async (req, res) => {
   try {
-    const { limit = 1000, skip = 0, search } = extractCommonQueryParams(req);
-    let matchQuery = { _id: new mongoose.Types.ObjectId(req.params.id) };
+    const id = getIdFromParams(req);
 
-    if (search) {
-      matchQuery.$or = getCommonSearchConditionForMasters(search);
+    // Check if role exists
+    const role = await Role.findById(id);
+    if (!role) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.NOT_FOUND,
+        status: false,
+        message: 'Role not found',
+      });
     }
 
-    const [rolesAgg] = await Role.aggregate([
-      { $match: matchQuery },
-      { $sort: { createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: 'userRole',
-          as: 'users',
-        },
-      },
-      {
-        $addFields: {
-          userCount: { $size: '$users' },
-          permissionCount: {
-            $sum: {
-              $map: {
-                input: '$permissions',
-                as: 'perm',
-                in: { $size: '$$perm.actions' },
-              },
-            },
-          },
-          moduleCount: { $size: '$permissions' },
-        },
-      },
-      {
-        $project: {
-          users: 0,
-        },
-      },
-    ]);
+    // Check if role is default (prevent deletion of default roles)
+    if (role.isDefault) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.BAD_REQUEST,
+        status: false,
+        message: 'Cannot delete default role',
+      });
+    }
+
+    // Check if any users are assigned to this role
+    const User = mongoose.model('User');
+    const userCount = await User.countDocuments({ userRole: id });
+
+    if (userCount > 0) {
+      return createResponse({
+        res,
+        statusCode: httpStatus.BAD_REQUEST,
+        status: false,
+        message: `Cannot delete role. ${userCount} user(s) are assigned to this role.`,
+      });
+    }
+
+    await Role.findByIdAndDelete(id);
 
     return createResponse({
       res,
       statusCode: httpStatus.OK,
       status: true,
-      message: 'Roles retrieved',
-      data: { list: rolesAgg },
+      message: 'Role deleted successfully',
     });
   } catch (error) {
     return createResponse({
       res,
       statusCode: httpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Failed to fetch roles',
       status: false,
+      message: 'Failed to delete role',
       error: error.message,
     });
   }
@@ -254,5 +249,5 @@ export const RoleController = {
   createRole,
   getRole,
   updateRole,
-  getPermissions
+  deleteRole
 };
